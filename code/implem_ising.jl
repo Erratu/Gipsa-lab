@@ -19,7 +19,7 @@ function heat_bath_ising(Q,X,m,n,nb_it,beta,Xobs)
 
         if t % 10 == 0
             update_ising_view!(Xobs, X)
-            sleep(0.01)
+            sleep(0.1)
         end
 
     end
@@ -49,7 +49,7 @@ function parallel_tempering_ising(Q,m,n,nb_it,nb_sim)
     for i in 1:nb_it
         for sim in 1:nb_sim
             sims[sim] = heat_bath_ising(Q,sims[sim],m,n,n, betas[sim], Xobs[sim])
-            X = view(sims, :, sim)
+            X = sims[sim]
             # calcul de l'énergie
             E[sim] = 0.5*dot(X, Q, X)-dot(m,X)
         end
@@ -64,4 +64,4 @@ function parallel_tempering_ising(Q,m,n,nb_it,nb_sim)
     return sims[nb_sim]
 end
 
-X = parallel_tempering_ising(Q,m,n,200,5)
+X = parallel_tempering_ising(Q,m,n,200,3)
