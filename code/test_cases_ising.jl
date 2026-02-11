@@ -1,4 +1,4 @@
-using Test
+using Test, Printf
 include("ising_model_2.jl")
 
 @testset "Ising Model Suite" begin
@@ -26,7 +26,11 @@ include("ising_model_2.jl")
         end
         probs_emp = counts ./ sum(counts)
 
-        @test all(abs.(probs_emp .- probs_theo) .< 0.05)
+        # Calcul de l'écart maximal pour affichage
+        diff_max = maximum(abs.(probs_emp .- probs_theo))
+        @printf("\n[Loi de Proba N=4] Différence max : %.4f (Seuil : 0.05)\n", diff_max)
+
+        @test diff_max < 0.05
     end
 
     @testset "Conditions aux limites & Minima" begin
@@ -38,17 +42,24 @@ include("ising_model_2.jl")
         X = rand([-1,1], n)
         X[1], X[n] = 1, 1 
         heat_bath_ising!(X, Q, m, 5.0, 5000, fixed_indices=fixed)
+        
+        err_align = n - abs(sum(X))
+        @printf("\n[1D Dirichlet] Erreur d'alignement : %d (Attendu : 0)\n", err_align)
         @test all(X .== 1)
 
         # TEST 2 : Cercle 1D (Périodique)
         Q_cercle = adjacency_1d(n, periodic=true)
         X = rand([-1,1], n)
         heat_bath_ising!(X, Q_cercle, m, 5.0, 5000)
+        
+        res_cercle = abs(sum(X))
+        @printf("[Cercle 1D] Magnétisation totale : %d (Cible : %d)\n", res_cercle, n)
         # Sur un cercle à basse température, tous les spins doivent être identiques
-        @test abs(sum(X)) == n 
+        @test res_cercle == n 
     end
 
     @testset "Tests 2D (N = 3, 4, 5)" begin
+        @printf("\n[Tests 2D Basse T]")
         for L in [3, 4, 5]
             n = L*L
             Q = adjacency_2d(L, periodic=true)
@@ -56,8 +67,12 @@ include("ising_model_2.jl")
             X = rand([-1,1], n)
             # Basse température
             heat_bath_ising!(X, Q, m, 2.0, n*100)
-            @test abs(sum(X)) == n # Alignement complet
+            
+            res_2d = abs(sum(X))
+            @printf("\n -> L=%d : Obtenu %d / Attendu %d", L, res_2d, n)
+            @test res_2d == n # Alignement complet
         end
+        println()
     end
 
     @testset "Transition de Phase (2D)" begin
@@ -74,6 +89,8 @@ include("ising_model_2.jl")
         mag_froid = abs(sum(sims[end]) / n)
         mag_chaud = abs(sum(sims[1]) / n)
         
+        @printf("\n[Transition 2D PT] |M| Froid : %.3f (Seuil > 0.8) | |M| Chaud : %.3f (Seuil < 0.3)\n", mag_froid, mag_chaud)
+        
         @test mag_froid > 0.8  # Phase ordonnée (Ferromagnétique)
         @test mag_chaud < 0.3  # Phase désordonnée (Paramagnétique)
         
@@ -87,7 +104,10 @@ include("ising_model_2.jl")
         X = rand([-1,1], n)
         # À basse température, le système doit s'ordonner (|M| proche de 1)
         heat_bath_ising!(X, Q, zeros(n), 1.0, 5000)
-        @test abs(sum(X)/n) > 0.8
+        
+        mag_hb = abs(sum(X)/n)
+        @printf("\n[Spontanée HB 2D] |M| final : %.3f (Seuil > 0.8)\n", mag_hb)
+        @test mag_hb > 0.8
     end
 
 end

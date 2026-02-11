@@ -6,10 +6,10 @@ function heat_bath_ising(Q,X,m,n,nb_it,beta,Xobs)
 
     for t in 1:nb_it
         i = rand(1:n)
-        #alpha = beta*(dot(view(Q, i, :), X) - Q[i,i]*X[i] - m[i])
+        #alpha = beta*(dot(view(Q, i, :), X) - Q[i,i]*X[i] + m[i])
         #p = exp(-alpha)/(exp(-alpha)+exp(alpha))
 
-        delta_E = 2 * (dot(view(Q, i, :), X) - Q[i,i]*X[i] - m[i])
+        delta_E = 2 * (dot(view(Q, i, :), X) - Q[i,i]*X[i] + m[i])
         p = 1 / (1 + exp(beta * delta_E))
         if rand() < p
             X[i] = 1
@@ -51,7 +51,7 @@ function parallel_tempering_ising(Q,m,n,nb_it,nb_sim)
             sims[sim] = heat_bath_ising(Q,sims[sim],m,n,n, betas[sim], Xobs[sim])
             X = sims[sim]
             # calcul de l'énergie
-            E[sim] = 0.5*dot(X, Q, X)-dot(m,X)
+            E[sim] = -0.5*dot(X, Q, X) - dot(m,X)
         end
         # échange entre les simulations de différentes températures
         for sim in 1:nb_sim-1
