@@ -82,11 +82,11 @@ L_difficile = 40
 nb_it_difficile = 5000
 beta_tres_froid = 1.2 # Plus beta est fort, plus le HB est "rigide"
 
-#run_full_comparison(L_difficile, nb_it_difficile, beta_tres_froid) # magnétisation spontanée
+run_full_comparison(L_difficile, nb_it_difficile, beta_tres_froid) # magnétisation spontanée
 #run_full_comparison(20, 4000, 0.8) # magnétisation spontanée visible en flip-flop
 
-m = fill(0.02, 20*20) # Champ très faible (ne force pas l'alignement)
-run_full_comparison(20, 4000, 0.8, m) # magnétisation spontanée visible sans flip-flop
+#m = fill(0.02, 20*20) # Champ très faible (ne force pas l'alignement)
+#run_full_comparison(20, 4000, 0.8, m) # magnétisation spontanée visible sans flip-flop
 
 #run_full_comparison(L_difficile, nb_it_difficile, 0.2) # pas de magnétisation spontanée
 #run_full_comparison(L_difficile, nb_it_difficile, 0.44) # transition de phase
