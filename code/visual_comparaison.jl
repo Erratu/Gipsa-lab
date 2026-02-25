@@ -67,8 +67,8 @@ function run_full_comparison(L=20, nb_it=4000, beta_froid=0.8, m=zeros(L*L))
             end
             
             # Heatmaps finales
-            p_pt = heatmap(reshape(sims_pt[end], L, L), c=:binary, title="PT Final (Froid)", ratio=1, axis=false)
-            p_hb = heatmap(reshape(X_hb, L, L), c=:binary, title="HB Final", ratio=1, axis=false)
+            p_pt = heatmap(reshape(sims_pt[end], L, L), c=:binary, title="PT Final (Froid)", ratio=1, axis=false, clims=(-1, 1))
+            p_hb = heatmap(reshape(X_hb, L, L), c=:binary, title="HB Final", ratio=1, axis=false, clims=(-1, 1))
             
             # Organisation du Dashboard
             # Layout : 2 en haut, 1 large au milieu, 2 en bas
