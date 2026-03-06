@@ -121,7 +121,7 @@ function plot_configuration(X)
     fig = Figure()
     ax = Axis3(fig[1,1])
 
-    scatter!(ax,
+    GLMakie.scatter!(ax,
         X[1,:],
         X[2,:],
         X[3,:],
@@ -132,19 +132,17 @@ function plot_configuration(X)
 end
 
 function main()
-
     n = 20   # nombre de charges
 
     println("Résolution du problème de Thomson pour n = $n")
-    println()
-
+    
     X, E = parallel_tempering_thomson(n)
 
-    println()
-    println("====================================")
+    println("\n====================================")
     println("Énergie finale : ", E)
     println("====================================")
 
+    # Capturer la figure
     plot_configuration(X)
 end
 
