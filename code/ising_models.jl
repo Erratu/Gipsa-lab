@@ -12,19 +12,28 @@ function run_pt!(state::ChainState, Q, m_field)
     for s in 1:state.nb_sim
         heat_bath_ising!(state.sims[s], Q, m_field, state.betas[s], n)
     end
+    
     for _ in 1:state.nb_sim
         i = rand(1:state.nb_sim-1)
         E1 = energy(state.sims[i], Q, m_field)
         E2 = energy(state.sims[i+1], Q, m_field)
         
-        state.swaps_attempted[i] += 1
-        
         if rand() < exp((state.betas[i] - state.betas[i+1]) * (E1 - E2))
             state.sims[i], state.sims[i+1] = state.sims[i+1], state.sims[i]
             state.indices[i], state.indices[i+1] = state.indices[i+1], state.indices[i]
-            state.swaps_accepted[i] += 1
         end
     end
+    
+    for i in 1:state.nb_sim
+        idx = state.indices[i]
+        if i == state.nb_sim
+            state.is_going_down[idx] = true
+        elseif i == 1 && state.is_going_down[idx]
+            state.is_going_down[idx] = false
+            state.round_trips += 1
+        end
+    end
+    
     for s in 1:state.nb_sim
         push!(state.mag_hist[s], abs(sum(state.sims[s])/n))
         push!(state.ene_hist[s], energy(state.sims[s], Q, m_field)/n)
@@ -32,15 +41,14 @@ function run_pt!(state::ChainState, Q, m_field)
     end
 end
 
-function algo1_exploration!(state::ChainState, Q, m_field)
+function algo1_deo!(state::ChainState, Q, m_field, t)
     n = state.L^2
     for s in 1:state.nb_sim
         heat_bath_ising!(state.sims[s], Q, m_field, state.betas[s], n)
     end
-end
 
-function algo2_communication!(state::ChainState, Q, m_field, t)
-    offset = (t % 2 == 0) ? 1 : 2
+    offset = (t % 2 == 0) ? 2 : 1
+    
     for i in 1:(state.nb_sim - 1)
         E1 = energy(state.sims[i], Q, m_field)
         E2 = energy(state.sims[i+1], Q, m_field)
@@ -49,46 +57,69 @@ function algo2_communication!(state::ChainState, Q, m_field, t)
         state.swap_rejections[i] += (1.0 - alpha)
         
         if i % 2 == offset % 2
-            state.swaps_attempted[i] += 1
             if rand() < alpha
                 state.sims[i], state.sims[i+1] = state.sims[i+1], state.sims[i]
                 state.indices[i], state.indices[i+1] = state.indices[i+1], state.indices[i]
-                state.swaps_accepted[i] += 1
             end
         end
     end
-end
 
-function algo3_adaptation!(state::ChainState, t)
-    freq = 100
-    if t % freq == 0
-        rates = state.swap_rejections ./ freq
-        target_rej = sum(rates) / (state.nb_sim - 1)
-        
-        new_betas = copy(state.betas)
-        gamma = 1.0 / sqrt(t)
-        
-        for i in 2:(state.nb_sim - 1)
-            diff = rates[i-1] - target_rej
-            proposed_beta = state.betas[i] + gamma * diff * (state.betas[i+1] - state.betas[i-1])
-            
-            new_betas[i] = max(state.betas[i-1] + 1e-5, min(state.betas[i+1] - 1e-5, proposed_beta))
+    for i in 1:state.nb_sim
+        idx = state.indices[i]
+        if i == state.nb_sim
+            state.is_going_down[idx] = true
+        elseif i == 1 && state.is_going_down[idx]
+            state.is_going_down[idx] = false
+            state.round_trips += 1
         end
-        
-        state.betas .= new_betas
-        fill!(state.swap_rejections, 0.0)
     end
-end
 
-function algo4_nrpt!(state::ChainState, Q, m_field, t)
-    algo1_exploration!(state, Q, m_field)
-    algo2_communication!(state, Q, m_field, t)
-    algo3_adaptation!(state, t)
-    
-    n = state.L^2
     for s in 1:state.nb_sim
         push!(state.mag_hist[s], abs(sum(state.sims[s])/n))
         push!(state.ene_hist[s], energy(state.sims[s], Q, m_field)/n)
         push!(state.trajectoires[s], findfirst(==(s), state.indices))
+    end
+end
+
+function algo2_updateschedule(Lambda_hat, betas, N)
+    Lambda_max = Lambda_hat[end]
+    new_betas = zeros(Float64, N)
+    new_betas[1] = betas[1]
+    new_betas[end] = betas[end]
+    
+    for k in 2:(N-1)
+        target = (k - 1) / (N - 1) * Lambda_max
+        idx = findfirst(x -> x >= target, Lambda_hat)
+        if idx == 1
+            new_betas[k] = betas[1]
+        elseif idx === nothing
+            new_betas[k] = betas[end]
+        else
+            w = (target - Lambda_hat[idx-1]) / (Lambda_hat[idx] - Lambda_hat[idx-1])
+            new_betas[k] = betas[idx-1] + w * (betas[idx] - betas[idx-1])
+        end
+    end
+    return new_betas
+end
+
+function algo3_communicationbarrier(state::ChainState)
+    nb_sim = state.nb_sim
+    Lambda_hat = zeros(Float64, nb_sim)
+    Lambda_hat[1] = 0.0
+    for i in 2:nb_sim
+        Lambda_hat[i] = Lambda_hat[i-1] + state.swap_rejections[i-1]
+    end
+    return Lambda_hat
+end
+
+function algo4_nrpt!(state::ChainState, Q, m_field, t)
+    algo1_deo!(state, Q, m_field, t)
+    
+    freq = 100
+    if t % freq == 0
+        state.swap_rejections ./= freq
+        Lambda_hat = algo3_communicationbarrier(state)
+        state.betas = algo2_updateschedule(Lambda_hat, state.betas, state.nb_sim)
+        fill!(state.swap_rejections, 0.0)
     end
 end
