@@ -110,6 +110,7 @@ function run_and_compare_pt_nrpt(L, nb_sim, n_tune, n_sample, m_val, beta_max=0.
     ]
     
     figure_finale = plot(p1, p2, p_mag, p_ene, p_rt, layout=l, size=(1000, 900), margin=5Plots.mm)
+    savefig(figure_finale, joinpath(@__DIR__, "comparaison_PT_NRPT.png"))
     display(figure_finale)
     
     return figure_finale, state_nrpt, state_pt
