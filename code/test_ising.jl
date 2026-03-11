@@ -5,9 +5,6 @@ using LinearAlgebra
 using Statistics
 using Printf
 
-# Utilisation de TA fonction energy (convention -0.5) pour la cohérence
-# Rappel : energy(X, Q, m) = -0.5 * dot(X, Q, X) - dot(m, X)
-
 println("\n=== Démarrage de la suite de tests Validation PT ===\n")
 
 @testset "Validation Parallel Tempering" begin
