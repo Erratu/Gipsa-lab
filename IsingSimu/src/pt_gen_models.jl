@@ -1,8 +1,6 @@
-using Interpolations
-
 function algo_pt_complet!(sampler::PTSampler, state::PTState{T}, energy_func::Function, local_update!::Function, obs_func::Function, n_burnin::Int, n_sample::Int) where T
     total_scans = n_burnin + n_sample
-    println("PT (Burn-in: $n_burnin, Sample: $n_sample)")
+    @info "PT (Burn-in: $n_burnin, Sample: $n_sample)"
     
     for t in 1:total_scans
         for s in 1:sampler.nb_sim
@@ -13,8 +11,7 @@ function algo_pt_complet!(sampler::PTSampler, state::PTState{T}, energy_func::Fu
             i = rand(1:sampler.nb_sim-1)
             E1 = energy_func(state.sims[i])
             E2 = energy_func(state.sims[i+1])
-            delta_beta = sampler.betas[i] - sampler.betas[i+1]
-            alpha = min(1.0, exp(delta_beta * (E1 - E2)))
+            alpha = min(1.0, exp((sampler.betas[i] - sampler.betas[i+1]) * (E1 - E2)))
 
             if rand() < alpha
                 state.sims[i], state.sims[i+1] = state.sims[i+1], state.sims[i]
@@ -45,7 +42,7 @@ function algo_pt_complet!(sampler::PTSampler, state::PTState{T}, energy_func::Fu
             end
         end
     end
-    println("PT classique terminé : Round trips : $(state.metrics.round_trips)")
+    @info "PT classique terminé : Round trips : $(state.metrics.round_trips)"
 end
 
 function algo1_deo_complet!(sampler::PTSampler, state::PTState{T}, energy_func::Function, local_update!::Function, obs_func::Function, n_scan::Int; record_history::Bool=false) where T
@@ -61,8 +58,7 @@ function algo1_deo_complet!(sampler::PTSampler, state::PTState{T}, energy_func::
         for i in 1:(sampler.nb_sim - 1)
             E1 = energy_func(state.sims[i])
             E2 = energy_func(state.sims[i+1])
-            delta_beta = sampler.betas[i] - sampler.betas[i+1]
-            alpha = min(1.0, exp(delta_beta * (E1 - E2)))
+            alpha = min(1.0, exp((sampler.betas[i] - sampler.betas[i+1]) * (E1 - E2)))
 
             state.metrics.swap_rejections[i] += (1.0 - alpha)
 
@@ -96,35 +92,13 @@ function algo1_deo_complet!(sampler::PTSampler, state::PTState{T}, energy_func::
     state.metrics.swap_rejections ./= n_scan
 end
 
-function algo3_communicationbarrier(rejections::Vector{Float64}, betas::Vector{Float64})
-    nb_sim = length(betas)
-    Lambda_hat_points = zeros(Float64, nb_sim)
-    Lambda_hat_points[1] = 0.0
-    for i in 2:nb_sim
-        Lambda_hat_points[i] = Lambda_hat_points[i-1] + rejections[i-1]
-    end
-    return interpolate(betas, Lambda_hat_points, FritschCarlsonMonotonicInterpolation())
-end
-
-function find_beta_inverse(Lambda_func, target::Float64, beta_min::Float64, beta_max::Float64; tol=1e-8)
-    low, high = beta_min, beta_max
-    if target <= 0.0 return beta_min end
-    if target >= Lambda_func(beta_max) return beta_max end
-    
-    while (high - low) > tol
-        mid = (low + high) / 2
-        if Lambda_func(mid) < target low = mid else high = mid end
-    end
-    return (low + high) / 2
-end
-
 function algo2_updateschedule(Lambda_func, current_betas::Vector{Float64})
     N = length(current_betas)
     beta_min = current_betas[1]
     beta_max = current_betas[end]
     
     Lambda_total = Lambda_func(beta_max) 
-
+    
     if Lambda_total <= 1e-8
         return copy(current_betas)
     end
@@ -140,36 +114,59 @@ function algo2_updateschedule(Lambda_func, current_betas::Vector{Float64})
     return new_betas
 end
 
-function algo4_nrpt_complet!(sampler::PTSampler, state::PTState{T}, energy_func::Function, local_update!::Function, obs_func::Function, n_tune::Int, n_sample::Int) where T
+function find_beta_inverse(Lambda_func, target::Float64, beta_min::Float64, beta_max::Float64; tol=1e-8)
+    low, high = beta_min, beta_max
+    if target <= 0.0 return beta_min end
+    if target >= Lambda_func(beta_max) return beta_max end
+    
+    while (high - low) > tol
+        mid = (low + high) / 2
+        if Lambda_func(mid) < target low = mid else high = mid end
+    end
+    return (low + high) / 2
+end
+
+function algo3_communicationbarrier(rejections::Vector{Float64}, betas::Vector{Float64})
+    nb_sim = length(betas)
+    Lambda_hat_points = zeros(Float64, nb_sim)
+    Lambda_hat_points[1] = 0.0
+    for i in 2:nb_sim
+        Lambda_hat_points[i] = Lambda_hat_points[i-1] + rejections[i-1]
+    end
+    return interpolate(betas, Lambda_hat_points, FritschCarlsonMonotonicInterpolation())
+end
+
+function algo4_nrpt_complet!(sampler::PTSampler, state::PTState{T}, energy_func, local_update!, obs_func, n_tune::Int, n_sample::Int; record_tuning::Bool=false) where T
     maxRound = floor(Int, log2(n_tune))
     n_scans_per_round = 1 
     
-    println("NRPT (Tuning: $n_tune, Sample: $n_sample)")
+    @info "NRPT (Tuning: $n_tune, Sample: $n_sample)"
     
     for r in 1:maxRound
-        algo1_deo_complet!(sampler, state, energy_func, local_update!, obs_func, n_scans_per_round, record_history=false)
+        algo1_deo_complet!(sampler, state, energy_func, local_update!, obs_func, n_scans_per_round, record_history=record_tuning)
         
         Lambda_func = algo3_communicationbarrier(state.metrics.swap_rejections, sampler.betas)
-        
-        # On passe directement le vecteur de betas pour avoir accès au min et max
         sampler.betas = algo2_updateschedule(Lambda_func, sampler.betas)
         
         n_scans_per_round *= 2
         Lambda_total = Lambda_func(sampler.betas[end])
-        println("Round $r/$maxRound | Scans: $(n_scans_per_round/2) | Lambda total: $(round(Lambda_total, digits=2))")
+        @info "Round $r/$maxRound | Scans: $(n_scans_per_round/2) | Lambda total: $(round(Lambda_total, digits=2))"
     end
     
     Lambda_final = algo3_communicationbarrier(state.metrics.swap_rejections, sampler.betas)(sampler.betas[end])
     N_optimal = floor(Int, 2 * Lambda_final)
     
-    println("Lambda final estimé : $(round(Lambda_final, digits=2))")
-    println("Nombre de chaînes optimal recommandé (N*) : $N_optimal")
+    @info "Lambda final estimé : $(round(Lambda_final, digits=2))"
+    @info "Nombre de chaînes optimal recommandé (N*) : $N_optimal"
     
-    state.metrics.round_trips = 0
-    empty_history!(state.history)
+    # On n'efface l'historique que si on ne veut pas voir le tuning
+    if !record_tuning
+        state.metrics.round_trips = 0
+        empty_history!(state.history)
+    end
     
-    println("Echantillonnage (n_sample = $n_sample)...")
+    @info "Echantillonnage (n_sample = $n_sample)"
     algo1_deo_complet!(sampler, state, energy_func, local_update!, obs_func, n_sample, record_history=true)
     
-    println("NRPT terminé : Round trips réalisés : $(state.metrics.round_trips)")
+    @info "NRPT terminé. Round trips réalisés : $(state.metrics.round_trips)"
 end

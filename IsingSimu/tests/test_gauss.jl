@@ -1,5 +1,4 @@
-include("ising_structures.jl")
-include("pt_gen_models.jl")
+using IsingSimu
 
 using Distributions, Plots, Random
 

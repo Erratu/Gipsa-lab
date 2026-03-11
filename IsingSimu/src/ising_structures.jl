@@ -1,5 +1,3 @@
-using Statistics
-
 mutable struct PTSampler
     nb_sim::Int
     betas::Vector{Float64}
