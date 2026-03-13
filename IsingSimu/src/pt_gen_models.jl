@@ -5,6 +5,14 @@ function algo_pt_complet!(sampler::PTSampler, state::PTState{T}, energy_func::Fu
     for t in 1:total_scans
         for s in 1:sampler.nb_sim
             state.sims[s] = local_update!(state.sims[s], sampler.betas[s])
+
+            current_E = energy_func(state.sims[s])
+            
+            if current_E < state.energy_min
+                state.energy_min = current_E
+                state.global_best_X = copy(state.sims[s])
+            end
+
         end
 
         for _ in 1:sampler.nb_sim
@@ -51,6 +59,13 @@ function algo1_deo_complet!(sampler::PTSampler, state::PTState{T}, energy_func::
     for t in 1:n_scan
         for s in 1:sampler.nb_sim
             state.sims[s] = local_update!(state.sims[s], sampler.betas[s])
+
+            current_E = energy_func(state.sims[s])
+            
+            if current_E < state.energy_min
+                state.energy_min = current_E
+                state.global_best_X = copy(state.sims[s])
+            end
         end
 
         offset = (t % 2 == 0) ? 2 : 1

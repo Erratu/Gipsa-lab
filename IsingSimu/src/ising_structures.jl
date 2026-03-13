@@ -47,6 +47,9 @@ mutable struct PTState{T}
     indices::Vector{Int}         
     metrics::PTMetrics
     history::PTHistory  
+    energy_min::Float64
+    global_best_X::T
+
 
     function PTState{T}(initial_states::Vector{T}) where T
         nb_sim = length(initial_states)
@@ -54,7 +57,9 @@ mutable struct PTState{T}
             copy(initial_states), 
             collect(1:nb_sim), 
             PTMetrics(nb_sim), 
-            PTHistory(nb_sim)
+            PTHistory(nb_sim),
+            Inf,
+            copy(initial_states[end])
         )
     end
 end
