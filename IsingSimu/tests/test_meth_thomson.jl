@@ -7,6 +7,7 @@ using Zygote
 using Combinatorics
 using JuMP
 using Ipopt
+using Plots
 
 function thomson_energy(X::Matrix{Float64}) 
     n = size(X,2) 
@@ -156,98 +157,7 @@ function methode_champ_moyen(H, n; T_init=10.0, T_final=0.01, decay=0.9)
     return best_idx, evaluer_energie(H, best_idx)
 end
 
-function comparer_methodes(m, n)
-    println("Comparaison pour m=$m, n=$n")
-    
-    X = randn(3, m)
-    X = X ./ sqrt.(sum(X.^2, dims=1))
-    H = matrice_interactions(X)
-    
-    # Recherche exhaustive (uniquement si raisonnable)
-    if binomial(BigInt(m), BigInt(n)) <= 100_000
-        t_ex = @elapsed idx, E = methode_exhaustive(H, n)
-        println("Exhaustive : E = $(round(E, digits=5)) | Temps = $(round(t_ex, digits=4)) s")
-    else
-        println("Exhaustive : Ignorée (trop de combinaisons)")
-    end
-    
-    # Heuristique
-    t_heu = @elapsed idx, E = methode_heuristique(H, n)
-    println("Heuristique: E = $(round(E, digits=5)) | Temps = $(round(t_heu, digits=4)) s")
-    
-    # Relaxation JuMP
-    t_jump = @elapsed idx, E = methode_relaxation_jump(H, n)
-    println("Relaxation : E = $(round(E, digits=5)) | Temps = $(round(t_jump, digits=4)) s")
-    
-    # Champ Moyen (Ising) -> Belief Propagation pour un graphe complet
-    t_cm = @elapsed idx, E = methode_champ_moyen(H, n)
-    println("Champ Moyen: E = $(round(E, digits=5)) | Temps = $(round(t_cm, digits=4)) s")
-    println("-"^40)
-end
-
-comparer_methodes(21, 20) 
-#comparer_methodes(50, 10) 
-#comparer_methodes(148, 100) 
-
-function plot_all_results(results_dict, histories_dict, n)
-    fig = GL.Figure(size = (1600, 900))
-    
-    # énergie
-    ax_energy = GL.Axis(fig[1, 1:length(results_dict)], 
-        title="Convergence de l'Énergie pour n=$n", 
-        xlabel="Itérations", 
-        ylabel="Énergie de Thomson")
-    
-    for (name, hist) in histories_dict
-        if !isempty(hist)
-            GL.lines!(ax_energy, hist, label=name, linewidth=2)
-        end
-    end
-    GL.axislegend(ax_energy)
-    
-    r_sphere = 0.98
-    u_vals = range(0, 2π, length=40)
-    v_vals = range(0, π, length=40)
-    x_sphere = [r_sphere * cos(u) * sin(v) for u in u_vals, v in v_vals]
-    y_sphere = [r_sphere * sin(u) * sin(v) for u in u_vals, v in v_vals]
-    z_sphere = [r_sphere * cos(v) for u in u_vals, v in v_vals]
-
-    opaque_gray = fill(GL.RGBf(0.8, 0.8, 0.8), size(z_sphere))
-
-    # Visualisation 3D de la config finale pour chaque méthode
-    col = 1
-    for (name, X_final) in results_dict
-        ax_3d = GL.Axis3(fig[2, col], title=name, aspect = :data, azimuth=pi/4, elevation=pi/6)
-        
-        # Sphère
-        GL.surface!(ax_3d, x_sphere, y_sphere, z_sphere, color= opaque_gray, transparency=false)
-        
-        # Points
-        GL.scatter!(ax_3d, X_final[1,:], X_final[2,:], X_final[3,:], 
-            markersize = 15, color = :red, strokewidth = 1, strokecolor = :black)
-        
-        col += 1
-    end
-    
-    screen = GL.Screen()
-    GL.display(screen, fig)
-    
-    return fig, screen
-end
-
-function take_random_subset(Y::Matrix{Float64})
-    n = size(Y, 2)
-    
-    # q(X) uniforme
-    idx_to_remove = rand(1:n)
-    indices_to_keep = [1:idx_to_remove-1; idx_to_remove+1:n]
-    X = Y[:, indices_to_keep]
-    removed_point = Y[:, idx_to_remove]
-    
-    return X, removed_point, idx_to_remove
-end
-
-function sgd_loo(lr=0.01,max_iter=2000)
+function sgd_loo(n::Int; lr=0.01,max_iter=2000)
     X = random_configuration(n+1)
     n = size(X, 2)
     history = Float64[]
@@ -267,44 +177,75 @@ function sgd_loo(lr=0.01,max_iter=2000)
 
         current_lr *= decay_rate
     end
-    
-    # regarder l'énergie de tous les subsets, et sélectionner ?
 
     return X, history
 end
 
-function main()
-    n = 20 
-    @info "Résolution du problème de Thomson sur la sphère pour n = $n" 
+function comparaison(n)
+    m = n+1
+    X, history = sgd_loo(n)
+    println("Config m trouvée.")
     
-    Random.seed!(1234)
+    println("\n--- 2. Sélection du meilleur sous-ensemble (n=$n) ---")
+    H = matrice_interactions(X)
     
-    results = Dict{String, Matrix{Float64}}()
-    histories = Dict{String, Vector{Float64}}()
-    times = Dict{String, Float64}()
+    # Recherche Exhaustive
+    t_ex = @elapsed idx_ex, E_ex = methode_exhaustive(H, n)
+    println("Exhaustive : E = $(round(E_ex, digits=6)) | Point exclu : $(setdiff(1:m, idx_ex)[1]) | Temps = $(round(t_ex, digits=5)) s")
     
-    # leave-one-out
-    t_pgd = @elapsed begin X_sgd_loo, hist_sgd_loo = sgd_loo() end
-    results["LOO"] = X_sgd_loo
-    histories["LOO"] = hist_sgd_loo
-    times["LOO"] = t_pgd
-    @printf("LOO : %.6f\n", thomson_energy(X_sgd_loo))
-
-    min_global_theorique = 150.881568
-    println(@sprintf("| %-15s | %-12s | %-12s | %-10s |", "Méthode", "Énergie", "Δ au Global", "Temps (s)"))
-
-    order = ["LOO"]
-    for name in order
-        E = thomson_energy(results[name])
-        delta = E - min_global_theorique
-        t = times[name]
-        println(@sprintf("| %-20s | %12.6f | %12.6f | %10.3f |", name, E, delta, t))
-    end
-
-    fig, screen = plot_all_results(results, histories, n)
+    # Glouton + Swaps
+    t_heu = @elapsed idx_heu, E_heu = methode_heuristique(H, n)
+    println("Heuristique: E = $(round(E_heu, digits=6)) | Point exclu : $(setdiff(1:m, idx_heu)[1]) | Temps = $(round(t_heu, digits=5)) s")
     
-    GL.save("graphiques/thomson_comparaison_n$(n).png", fig)
-    wait(screen)
+    # Relaxation Continue (JuMP/Ipopt)
+    t_jump = @elapsed idx_jump, E_jump = methode_relaxation_jump(H, n)
+    println("Relaxation : E = $(round(E_jump, digits=6)) | Point exclu : $(setdiff(1:m, idx_jump)[1]) | Temps = $(round(t_jump, digits=5)) s")
+    
+    # Champ Moyen (BP approché)
+    t_cm = @elapsed idx_cm, E_cm = methode_champ_moyen(H, n)
+    println("Champ Moyen: E = $(round(E_cm, digits=6)) | Point exclu : $(setdiff(1:m, idx_cm)[1]) | Temps = $(round(t_cm, digits=5)) s")
+    
+    return X, history
 end
 
-main()
+n=38
+X_final, hist = comparaison(n)
+
+p1 = plot(hist, 
+    title="Convergence de l'énergie (SGD)", 
+    xlabel="Itérations (x500)", 
+    ylabel="Énergie de Thomson", 
+    linewidth=2, 
+    legend=false,
+    color=:blue
+)
+
+x_coords = X_final[1, :]
+y_coords = X_final[2, :]
+z_coords = X_final[3, :]
+
+H_final = matrice_interactions(X_final)
+idx_gardes, _ = methode_heuristique(H_final, 20)
+couleurs = [i in idx_gardes ? :green : :red for i in 1:21]
+
+p2 = scatter(x_coords, y_coords, z_coords, 
+    title="Configuration finale (n=20 sur m=21)",
+    markersize=5,
+    color=couleurs,
+    legend=false,
+    camera=(45, 30)
+)
+plot(p1, p2, layout=(1, 2), size=(900, 400))
+
+function take_random_subset(Y::Matrix{Float64})
+    n = size(Y, 2)
+    
+    # q(X) uniforme
+    idx_to_remove = rand(1:n)
+    indices_to_keep = [1:idx_to_remove-1; idx_to_remove+1:n]
+    X = Y[:, indices_to_keep]
+    removed_point = Y[:, idx_to_remove]
+    
+    return X, removed_point, idx_to_remove
+end
+
