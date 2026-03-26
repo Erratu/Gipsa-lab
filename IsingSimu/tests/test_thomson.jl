@@ -50,7 +50,7 @@ function plot_all_results(results_dict, histories_dict, n)
 end
 
 function main()
-    n = 188 
+    n = 38 
     @info "Résolution du problème de Thomson sur la sphère pour n = $n" 
     
     Random.seed!(1234)

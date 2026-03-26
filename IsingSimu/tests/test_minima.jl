@@ -1,13 +1,47 @@
 import GLMakie as GL 
+using LinearAlgebra
+using Statistics
 using Printf 
 using Random
 using IsingSimu
 
-# Calcule une distance invariante par rotation entre deux configurations
+# Calcule une distance invariante par rotation et permutation entre deux configurations
 function invariant_distance(X1::Matrix{Float64}, X2::Matrix{Float64})
-    G1 = X1' * X1
-    G2 = X2' * X2
-    return norm(G1 - G2) # Norme de Frobenius de la différence
+    # Calculer toutes les distances mutuelles (n*(n-1)/2 distances)
+    dists1 = Float64[]
+    dists2 = Float64[]
+    n = size(X1, 2)
+    
+    for i in 1:n-1, j in i+1:n
+        push!(dists1, norm(X1[:,i] - X1[:,j]))  
+        push!(dists2, norm(X2[:,i] - X2[:,j]))
+    end
+    
+    # TRIER les distances : cela rend la signature invariante à la permutation
+    sort!(dists1)
+    sort!(dists2)
+    
+    return norm(dists1 - dists2)
+end
+
+function get_distance_spectrum(X::Matrix{Float64})
+    n = size(X, 2)
+    # Nombre de distances uniques : n*(n-1)/2
+    num_dists = div(n * (n - 1), 2)
+    dists = Vector{Float64}(undef, num_dists)
+    
+    count = 1
+    for i in 1:n-1
+        for j in i+1:n
+            # Calcul de la distance euclidienne entre le point i et j
+            @inbounds dists[count] = sqrt((X[1,i]-X[1,j])^2 + (X[2,i]-X[2,j])^2 + (X[3,i]-X[3,j])^2)
+            count += 1
+        end
+    end
+    
+    # Le tri assure l'invariance par permutation des indices
+    sort!(dists) 
+    return dists
 end
 
 # Fonction de clustering
@@ -110,8 +144,8 @@ function plot_landscape_analysis(sizes::Vector{Int}, energies::Vector{Float64}, 
 end
 
 function main_landscape_analysis()
-    n = 188 
-    n_samples = 150
+    n = 38 
+    n_samples = 50
     
     @info "Démarrage de l'analyse du paysage énergétique pour n = $n"
     @info "Nombre d'échantillons aléatoires : $n_samples"
@@ -133,3 +167,22 @@ function main_landscape_analysis()
 end
 
 main_landscape_analysis()
+
+# n = 38
+
+# | Cluster    | Énergie         | Taille Bassin |
+# | 1          |      593.038504 |           10 |
+# | 2          |      593.048944 |            8 |
+# | 3          |      662.665878 |            1 |
+# | 4          |      664.113834 |            1 |
+# | 5          |      665.252980 |            1 |
+# | 6          |      667.230446 |            1 |
+# | 7          |      669.952895 |            1 |
+# | 8          |      672.100121 |            1 |
+# | 9          |      673.975371 |            1 |
+# | 10         |      677.800636 |            1 |
+# | 11         |      688.923057 |            1 |
+# | 12         |      689.058791 |            1 |
+# | 13         |      690.133481 |            1 |
+# | 14         |      696.244370 |            1 |
+# | 15         |      698.928968 |            1 |
