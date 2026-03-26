@@ -1,3 +1,5 @@
+import Manifolds as Manif
+
 # PGD (avec points fixés)
 function solve_pgd(X0::Matrix{Float64}; lr=0.01, max_iter=2000)
     X = copy(X0)

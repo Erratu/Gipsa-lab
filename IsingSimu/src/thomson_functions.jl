@@ -75,19 +75,24 @@ function quench_lbfgs_sph_fixed(X_init::Matrix{Float64})
     end
     
     function objective(angles)
+        # Détecte dynamiquement le type (Float64 ou ForwardDiff.Dual)
+        T = eltype(angles) 
+        
         # Point 1 (Fixe)
-        p1_x, p1_y, p1_z = 0.0, 0.0, 1.0
+        p1_x, p1_y, p1_z = T(0.0), T(0.0), T(1.0)
         
         # Point 2 (Méridien fixe, y=0)
         theta_2 = angles[1]
-        p2_x, p2_y, p2_z = sin(theta_2), 0.0, cos(theta_2)
+        p2_x, p2_y, p2_z = sin(theta_2), T(0.0), cos(theta_2)
         
-        E = 1.0 / sqrt((p1_x - p2_x)^2 + (p1_y - p2_y)^2 + (p1_z - p2_z)^2)
+        pts_x = Vector{T}(undef, n)
+        pts_y = Vector{T}(undef, n)
+        pts_z = Vector{T}(undef, n)
         
-        # Pré-allocation des coordonnées pour optimiser les calculs
-        pts_x, pts_y, pts_z = zeros(n), zeros(n), zeros(n)
         pts_x[1], pts_y[1], pts_z[1] = p1_x, p1_y, p1_z
         pts_x[2], pts_y[2], pts_z[2] = p2_x, p2_y, p2_z
+        
+        E = 1.0 / sqrt((p1_x - p2_x)^2 + (p1_y - p2_y)^2 + (p1_z - p2_z)^2)
         
         a_idx = 2
         for i in 3:n
