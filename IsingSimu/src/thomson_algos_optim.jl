@@ -37,12 +37,12 @@ function solve_pgd_momentum_fast(X0::Matrix{Float64}; lr::Float64=0.01, beta::Fl
 end
 
 # PT avec quench optimisé
-function solve_pt_fast(n::Int; n_burnin::Int=500, n_sample::Int=4000, n_restarts::Int=5)
+function solve_pt_fast(n::Int; n_burnin::Int=500, n_sample::Int=2000, n_restarts::Int=5)
     best_E = Inf
     best_overall_X = zeros(3, n)
 
     for _ in 1:n_restarts
-        n_replicas::Int = 48 
+        n_replicas::Int = 32 
         betas::Vector{Float64} = collect(range(0.01, 20.0, length=n_replicas)) 
         sampler::PTSampler = PTSampler(betas) 
         
@@ -67,12 +67,12 @@ function solve_pt_fast(n::Int; n_burnin::Int=500, n_sample::Int=4000, n_restarts
 end
 
 # NRPT avec quench optimisé
-function solve_nrpt_fast(n::Int; n_burnin::Int=1000, n_sample::Int=5000, n_restarts::Int=5)
+function solve_nrpt_fast(n::Int; n_burnin::Int=1000, n_sample::Int=3000, n_restarts::Int=5)
     best_E = Inf
     best_overall_X = zeros(3, n)
 
     for _ in 1:n_restarts
-        n_replicas::Int = 44 
+        n_replicas::Int = 26 
         betas::Vector{Float64} = collect(range(0.01, 20.0, length=n_replicas)) 
         sampler::PTSampler = PTSampler(betas) 
         
