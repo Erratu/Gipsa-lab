@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.12.5"
+julia_version = "1.12.4"
 manifest_format = "2.0"
-project_hash = "7a89293636b1796a62d0c8cf711d420265a7d6a8"
+project_hash = "39ee32628236acbbd5d23505a13c54bb3a0b9562"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "f7304359109c768cf32dc5fa2d371565bb63b68a"
@@ -638,7 +638,7 @@ uuid = "92d709cd-6900-40b7-9082-c6be49f344b6"
 version = "0.2.6"
 
 [[deps.IsingSimu]]
-deps = ["ADTypes", "Distributions", "ForwardDiff", "Interpolations", "Ipopt", "JuMP", "LinearAlgebra", "Manifolds", "Manopt", "Optim", "Plots", "Printf", "Random", "SparseArrays", "Statistics", "Test", "Zygote"]
+deps = ["ADTypes", "Combinatorics", "Distributions", "ForwardDiff", "Interpolations", "Ipopt", "JuMP", "LinearAlgebra", "Manifolds", "Manopt", "Optim", "Plots", "Printf", "Random", "SparseArrays", "Statistics", "Test", "Zygote"]
 path = "."
 uuid = "7092925b-092b-4279-9130-9b48b948f654"
 version = "0.1.0"

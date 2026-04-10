@@ -1,6 +1,6 @@
 import Manifolds as Manif
 
-# PGD (avec points fixés)
+# PGD
 function solve_pgd(X0::Matrix{Float64}; lr=0.01, max_iter=2000)
     X = copy(X0)
     history = Float64[]
@@ -8,12 +8,12 @@ function solve_pgd(X0::Matrix{Float64}; lr=0.01, max_iter=2000)
         push!(history, thomson_energy(X))
         G = Zygote.gradient(thomson_energy, X)[1]
         X .-= lr .* G
-        project_fixed_sphere!(X)
+        project_sphere!(X)
     end
     return X, history
 end
 
-# PGD avec Momentum (avec points fixés)
+# PGD avec Momentum
 function solve_pgd_momentum(X0::Matrix{Float64}; lr=0.01, beta=0.9, max_iter=2000)
     X = copy(X0)
     V = zeros(size(X))
@@ -23,7 +23,7 @@ function solve_pgd_momentum(X0::Matrix{Float64}; lr=0.01, beta=0.9, max_iter=200
         G = Zygote.gradient(thomson_energy, X)[1]
         V .= beta .* V .+ (1 - beta) .* G
         X .-= lr .* V
-        project_fixed_sphere!(X)
+        project_sphere!(X)
     end
     return X, history
 end
@@ -115,8 +115,8 @@ function solve_jump_ipopt(X0::Matrix{Float64})
     return value.(x), Float64[] # Pas d'historique
 end
 
-# PT avec quench (avec points fixés)
-function solve_pt(n::Int; n_burnin=4000, n_sample=10000)
+# PT avec quench
+function solve_pt(n::Int; n_burnin=200, n_sample=500)
     n_replicas = 16 
     betas = collect(range(0.05, 15.0, length=n_replicas)) 
     sampler = PTSampler(betas) 
@@ -125,12 +125,12 @@ function solve_pt(n::Int; n_burnin=4000, n_sample=10000)
     state = PTState{Matrix{Float64}}(initial_states) 
     
     e_func = X -> thomson_energy(X) 
-    u_func = (X, b) -> thomson_update_fixed!(X, b, step_size=0.08) 
+    u_func = (X, b) -> thomson_update_fast!(X, b, step_size=0.08) 
     obs_func = X -> thomson_energy(X) 
     
     algo_pt_complet!(sampler, state, e_func, u_func, obs_func, n_burnin, n_sample) 
 
-    best_X = quench_lbfgs_sph_fixed(state.global_best_X)
+    best_X = quench_lbfgs_sph(state.global_best_X)
 
     return best_X, Float64[] 
 end
