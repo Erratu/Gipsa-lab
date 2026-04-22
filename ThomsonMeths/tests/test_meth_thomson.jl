@@ -16,53 +16,8 @@ function matrice_interactions(X)
     return H
 end
 
-function plot_diffusion_measure(n_target=46; n_large=300)
-    # On récupère les amas et les centres
-    X_optimal, all_points = sgd_diffusion_measure(n_target, n_large=n_large, max_iter=3000, burn_in=1000)
-    
-    fig = GL.Figure(size = (800, 800))
-    ax = GL.LScene(fig[1, 1], show_axis=false)
-    
-    # 1. Dessiner la sphère de base (semi-transparente)
-    GL.mesh!(ax, GL.Sphere(GL.Point3f(0), 0.95f0), color=(:white, 0.2), transparency=true)
-    
-    # 2. Afficher le nuage de points de la mesure stationnaire (très transparent)
-    # all_points contient l'historique complet
-    GL.scatter!(ax, all_points[1, :], all_points[2, :], all_points[3, :], 
-                markersize=3, color=(:blue, 0.05), transparency=true)
-    
-    # 3. Afficher les pics détectés par BLASSO/K-Means (gros points rouges)
-    GL.scatter!(ax, X_optimal[1, :], X_optimal[2, :], X_optimal[3, :], 
-                markersize=15, color=:red)
-    
-    GL.display(fig)
-    return fig
-end
-
-function plot_configuration_heatmap(X)
-    n = size(X, 2)
-    H = matrice_interactions(X)
-    
-    # Calcul du potentiel local pour chaque point (somme de sa colonne/ligne dans H)
-    potentiels_locaux = [sum(H[i, :]) for i in 1:n]
-    
-    fig = GL.Figure(size = (800, 600))
-    ax = GL.LScene(fig[1, 1], show_axis=false)
-    GL.mesh!(ax, GL.Sphere(GL.Point3f(0), 0.98f0), color=(:white, 0.5), transparency=true)
-    
-    # Tracer les points avec une colormap basée sur la répulsion locale
-    # Les points jaunes/blancs (haute énergie) sont les candidats à l'exclusion
-    scatter_plot = GL.scatter!(ax, X[1, :], X[2, :], X[3, :], 
-                color=potentiels_locaux, colormap=:inferno, markersize=15)
-    
-    GL.Colorbar(fig[1, 2], scatter_plot, label="Potentiel de Répulsion Local")
-    
-    GL.display(fig)
-    return fig
-end
-
 function comparaison(m, n)
-    t_sgd = @elapsed X, history = sgd_loo(m, n)
+    t_sgd = @elapsed X, history = sgd_loo(m, n; strategy=:bp)
     println("Config n trouvée. Temps = $(round(t_sgd, digits=5)) s")
     
     println("\nSélection du meilleur sous-ensemble (m=$m, n=$n)")
@@ -92,9 +47,9 @@ function comparaison(m, n)
     t_gs = @elapsed idx_gs, E_gs = methode_gumbel_softmax(H, m)
     println("Gumbel-Softmax: E = $(round(E_gs, digits=6)) | Point exclu : $(setdiff(1:n, idx_gs)) | Temps = $(round(t_gs, digits=5)) s")
 
-    #t_diff = @elapsed X_optimal, _ = sgd_diffusion_measure(m)
-    #E_diff = evaluer_energie(H, X_optimal)
-    #println("Diffusion Measure: E = $(round(E_diff, digits=6)) | Temps = $(round(t_diff, digits=5)) s")
+    t_diff = @elapsed X_optimal, _ = sgd_diffusion_measure(m, n_large=300, max_iter=3000, burn_in=1000)
+    E_diff = evaluer_energie(H, X_optimal)
+    println("Diffusion Measure: E = $(round(E_diff, digits=6)) | Temps = $(round(t_diff, digits=5)) s")
     
     return X, history
 end

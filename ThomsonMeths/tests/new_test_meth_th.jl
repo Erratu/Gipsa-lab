@@ -20,11 +20,12 @@ function benchmark_q_distributions_and_save(m, n)
     t_boltz = @elapsed _, hist_boltz = sgd_loo(m, n, strategy=:boltzmann)
     println("Temps sgd_loo (Boltzmann) : $(round(t_boltz, digits=5)) s")
     
-    #t_dpp = @elapsed _, hist_dpp = sgd_loo(m, n, strategy=:dpp)
-    #println("Temps sgd_loo (DPP)       : $(round(t_dpp, digits=5)) s")
+    t_bp = @elapsed _, hist_bp = sgd_loo(m, n, strategy=:bp)
+    println("Temps sgd_loo (BP)       : $(round(t_bp, digits=5)) s")
     
     p = plot(hist_uni, label="Uniforme", linewidth=2)
-    plot!(p, hist_boltz, label="Boltzmann", linewidth=2, 
+    plot!(p, hist_boltz, label="Boltzmann", linewidth=2)
+    plot!(p, hist_bp, label="Belief Propagation", linewidth=2,
           title="Comparaison des distributions q (n=$n, m=$m)",
           xlabel="Itérations (x10)", ylabel="Énergie", legend=:topright)
           
@@ -140,7 +141,7 @@ function comparaison_and_save(m, n)
     println("Gumbel-Softmax: E = $(round(E_gs, digits=6)) | Temps = $(round(t_gs, digits=5)) s")
 
     t_diff = @elapsed X_optimal, _ = sgd_diffusion_measure(m, n_large=300, max_iter=3000, burn_in=1000)
-    E_diff = evaluer_energie(H, X_optimal)
+    E_diff = thomson_energy_fast(X_optimal)
     println("Diffusion Measure: E = $(round(E_diff, digits=6)) | Temps = $(round(t_diff, digits=5)) s")
 
     # Création du graphique de synthèse
@@ -237,7 +238,7 @@ function run_all_experiments()
     m_test = 46
     
     # 1. Comparaison des distributions q (Leave-one-out strict: n = m + 1)
-    #benchmark_q_distributions_and_save(m_test, m_test + 1)
+    benchmark_q_distributions_and_save(m_test, m_test + 1)
     
     # 2. Diffusion SGD et BLASSO
     # Note: On utilise un n_large plus petit (ex: 150) si 300 est trop lent
