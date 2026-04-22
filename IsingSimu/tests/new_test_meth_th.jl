@@ -129,6 +129,10 @@ function comparaison_and_save(m, n)
     t_gs = @elapsed idx_gs, E_gs = methode_gumbel_softmax(H, m)
     println("Gumbel-Softmax: E = $(round(E_gs, digits=6)) | Temps = $(round(t_gs, digits=5)) s")
 
+    t_diff = @elapsed X_optimal, _ = sgd_diffusion_measure(m)
+    E_diff = evaluer_energie(H, X_optimal)
+    println("Diffusion Measure: E = $(round(E_diff, digits=6)) | Temps = $(round(t_diff, digits=5)) s")
+
     # Création du graphique de synthèse
     p1 = plot(history, 
         title="Convergence (SGD Loo)", 
@@ -175,13 +179,13 @@ function run_all_experiments()
     #plot_diffusion_measure_and_save(m_test, n_large=150)
     
     # 3. Comparaison globale classique (n = m + 4 selon l'ancien script)
-    #X_fin = comparaison_and_save(m_test, m_test + 4)
+    X_fin = comparaison_and_save(m_test, m_test + 4)
     
     # 4. Heatmap d'énergie locale (en utilisant la configuration X_fin)
     #plot_configuration_heatmap_and_save(X_fin)
     
     # 5. Parallel Tempering (k_max = 5 "températures" exploratoires)
-    run_and_plot_parallel_tempering(m_test, 5)
+    #run_and_plot_parallel_tempering(m_test, 5)
     
     println("\n=== Toutes les expériences sont terminées ===")
     println("Tous les graphiques ont été générés dans le dossier : ./$OUT_DIR/")
