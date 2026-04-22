@@ -1,4 +1,5 @@
 using ThomsonMeths
+using PTShared
 using Printf 
 using LinearAlgebra 
 using Random 
@@ -91,7 +92,16 @@ function run_and_plot_parallel_tempering(m, k_max)
     
     # Exécution de l'algorithme (50 burn-in, 200 samples par exemple)
     algo_pt_complet!(sampler, state, E_func, upd_func, obs_func, 50, 200)
+
+    # Graphique 1 : Trajectoire de la Réplique 1 à travers les températures
+    p_traj = plot(state.history.trajectoires[1], 
+        title="Trajectoire PT (Réplique 1)", 
+        xlabel="Scans", ylabel="Indice de Température β", 
+        legend=false, color=:purple, linewidth=1.5, yticks=1:k_max)
     
+    filepath = joinpath(OUT_DIR, "4_parallel_tempering_traj.png")
+    savefig(p_traj, filepath)
+
     # s=1 correspond à beta=1.0 (la chaîne cible, cherchant le minimum strict pour m points)
     energie_cible = state.history.ene_hist[1]
     
@@ -167,6 +177,61 @@ function comparaison_and_save(m, n)
     return X_final
 end
 
+function plot_scaling_n_and_save(m_cible; max_n_extra=10)
+    println("\n--- Benchmark de Scalabilité (m=$m_cible fixe, n variable) ---")
+    
+    # On fait varier n de m+1 jusqu'à m + max_n_extra
+    plages_n = (m_cible + 1):(m_cible + max_n_extra)
+    
+    # Tableaux pour stocker les résultats
+    E_heu = Float64[]; T_heu = Float64[]
+    E_gs  = Float64[]; T_gs  = Float64[]
+    E_sgd = Float64[]; T_sgd = Float64[]
+    
+    for n in plages_n
+        @printf("Calcul pour n = %d...\n", n)
+        
+        # 1. Base commune : On génère d'abord une configuration stable de n points
+        X_base, _ = sgd_loo(m, n) 
+        H_base = matrice_interactions(X_base)
+        
+        # --- Méthode 1 : Heuristique (Glouton) ---
+        t1 = @elapsed _, e1 = methode_heuristique(H_base, m_cible)
+        push!(E_heu, e1)
+        push!(T_heu, t1)
+        
+        # --- Méthode 2 : Gumbel-Softmax ---
+        t2 = @elapsed _, e2 = methode_gumbel_softmax(H_base, m_cible)
+        push!(E_gs, e2)
+        push!(T_gs, t2)
+    end
+    
+    # --- Création du Graphique ---
+    
+    # Graphique Haut : Énergie trouvée
+    p_energie = plot(plages_n, E_heu, label="Heuristique", marker=:circle, linewidth=2, color=:limegreen)
+    plot!(p_energie, plages_n, E_gs, label="Gumbel-Softmax", marker=:square, linewidth=2, color=:orange)
+    plot!(p_energie, plages_n, E_sgd, label="SGD Boltzmann", marker=:diamond, linewidth=2, color=:red,
+          title="Énergie Minimale selon la taille du réservoir (m=$m_cible)",
+          ylabel="Énergie", legend=:topright, gridalpha=0.4)
+          
+    # Graphique Bas : Temps d'exécution (Échelle Logarithmique Y recommandée)
+    # On ajoute 1e-6 pour éviter les problèmes de log10(0) sur des temps très courts
+    p_temps = plot(plages_n, T_heu .+ 1e-6, label="", marker=:circle, linewidth=2, color=:limegreen)
+    plot!(p_temps, plages_n, T_gs .+ 1e-6, label="", marker=:square, linewidth=2, color=:orange)
+    plot!(p_temps, plages_n, T_sgd .+ 1e-6, label="", marker=:diamond, linewidth=2, color=:red,
+          title="Coût de Calcul (Échelle Log)",
+          xlabel="Nombre total de points (n)", ylabel="Temps (secondes)",
+          yaxis=:log10, gridalpha=0.4)
+          
+    # Assemblage
+    p_final = plot(p_energie, p_temps, layout=(2, 1), size=(800, 700), margin=5Plots.mm)
+    
+    filepath = joinpath(OUT_DIR, "6_scaling_energie_vs_temps.png")
+    savefig(p_final, filepath)
+    println("-> Graphique de scalabilité sauvegardé : $filepath")
+end
+
 # script d'exécution de tous les tests
 function run_all_experiments()
     m_test = 46
@@ -179,13 +244,15 @@ function run_all_experiments()
     #plot_diffusion_measure_and_save(m_test, n_large=150)
     
     # 3. Comparaison globale classique (n = m + 4 selon l'ancien script)
-    X_fin = comparaison_and_save(m_test, m_test + 4)
+    #X_fin = comparaison_and_save(m_test, m_test + 4)
     
     # 4. Heatmap d'énergie locale (en utilisant la configuration X_fin)
     #plot_configuration_heatmap_and_save(X_fin)
     
     # 5. Parallel Tempering (k_max = 5 "températures" exploratoires)
     #run_and_plot_parallel_tempering(m_test, 5)
+
+    plot_scaling_n_and_save(m_test)
     
     println("\n=== Toutes les expériences sont terminées ===")
     println("Tous les graphiques ont été générés dans le dossier : ./$OUT_DIR/")
