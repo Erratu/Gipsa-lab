@@ -252,6 +252,7 @@ function methode_belief_propagation_post_process(H, n; max_iter=500, damping=0.9
     return best_idx, E_min
 end
 
+# Reregarder #TODO
 # parfois presque le min, parfois très mauvais
 function methode_gumbel_softmax_it(H, n; epochs=1500, lr=0.1, tau=0.5, lambda_reg=5.0)
     m = size(H, 1)

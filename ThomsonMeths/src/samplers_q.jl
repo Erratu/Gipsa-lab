@@ -96,10 +96,10 @@ function take_random_subset_boltzmann(Y::Matrix{Float64}, m::Int; beta=2.0)
             energies[i] = E_i
         end
 
-        weights = exp.(beta .* (energies .- maximum(energies))) 
+        weights = exp.(beta .* (energies .- maximum(energies))) # caractériser la loi selon laquelle j'échantillone, la loi de ce qui reste après les k enlevés, la loi ce qu'on peut dire dessus #TODO
         weights ./= sum(weights)
         
-        idx_to_remove_local = sample(1:current_n, Weights(weights))
+        idx_to_remove_local = sample(1:current_n, Weights(weights)) 
         
         deleteat!(active_indices, idx_to_remove_local)
     end
@@ -166,5 +166,130 @@ function take_random_subset_bp(Y::Matrix{Float64}, m::Int; tau=0.5, max_iter=100
     weights ./= sum(weights)
 
     # 6. Tirage aléatoire sans remise basé sur les poids calculés
+    return sample(1:n, Weights(weights), m; replace=false) # Regarder ce que ça fait exactement #TODO
+end
+
+function take_random_subset_bp_opt(Y::Matrix{Float64}, m::Int; tau=0.5, max_iter=100, damping=0.9)
+    n = size(Y, 2)
+    dim = size(Y, 1)
+    
+    if m <= 0 return Int[] end
+    if m >= n return collect(1:n) end
+
+    # 1. Initialisation optimisée de H et J
+    H = zeros(n, n)
+    J = zeros(n, n)
+    h_base = zeros(n)
+    
+    @inbounds for i in 1:n
+        for j in (i+1):n
+            # Calcul manuel de la distance pour éviter les allocations de Y[:, i]
+            dist_sq = 0.0
+            for k in 1:dim
+                dist_sq += (Y[k, i] - Y[k, j])^2
+            end
+            val = 1.0 / sqrt(dist_sq)
+            
+            H[i, j] = H[j, i] = val
+            J[i, j] = J[j, i] = -val / 4.0
+        end
+    end
+
+    # Calcul de h_base pré-alloué
+    @inbounds for i in 1:n
+        s = 0.0
+        for j in 1:n
+            if j != i
+                s += H[i, j]
+            end
+        end
+        h_base[i] = -s / 4.0
+    end
+    
+    magnetization_target = 2.0 * m - n
+    
+    # 2. Pré-allocation des buffers de messages (Zéro allocation dans la boucle MCMC)
+    u = zeros(n, n)
+    u_new = zeros(n, n)
+    total_u_in = zeros(n)
+    mu = 0.0
+
+    # 3. Exécution de BP (Min-Sum)
+    @inbounds for iter in 1:max_iter
+        
+        # A. Mise à jour de total_u_in
+        for i in 1:n
+            s = 0.0
+            for k in 1:n
+                if k != i
+                    s += u[k, i]
+                end
+            end
+            total_u_in[i] = s
+        end
+        
+        # B. Estimation de la magnétisation et ajustement de mu
+        m_est = 0.0
+        for i in 1:n
+            m_est += clamp(h_base[i] + mu + total_u_in[i], -1.0, 1.0)
+        end
+        mu += 0.1 * (magnetization_target - m_est)
+
+        # C. Calcul de u_new et mise à jour de l'erreur (diff) en une seule passe
+        diff_sq = 0.0
+        for i in 1:n
+            cavity_base = h_base[i] + mu + total_u_in[i]
+            for j in 1:n
+                if i == j continue end
+                
+                cavity_field_i = cavity_base - u[j, i]
+                J_ij = J[i, j]
+                
+                # Cœur du calcul Min-Sum
+                new_val = sign(J_ij) * sign(cavity_field_i) * min(abs(J_ij), abs(cavity_field_i))
+                
+                # Damping et calcul de différence "in-place"
+                damped_val = damping * u[i, j] + (1.0 - damping) * new_val
+                diff_sq += (damped_val - u[i, j])^2
+                
+                # Stockage direct (on réutilise u pour éviter de copier après)
+                u_new[i, j] = damped_val 
+            end
+        end
+
+        # Mettre à jour u
+        for i in 1:n, j in 1:n
+            u[i, j] = u_new[i, j]
+        end
+        
+        if sqrt(diff_sq) < 1e-3
+            break
+        end
+    end
+
+    # 4. Calcul des croyances
+    beliefs = zeros(n)
+    @inbounds for i in 1:n
+        s = 0.0
+        for k in 1:n
+            if k != i
+                s += u[k, i]
+            end
+        end
+        beliefs[i] = h_base[i] + mu + s
+    end
+
+    # 5. Softmax optimisé
+    max_b = maximum(beliefs)
+    weights = zeros(n)
+    sum_w = 0.0
+    @inbounds for i in 1:n
+        w = exp((beliefs[i] - max_b) / tau)
+        weights[i] = w
+        sum_w += w
+    end
+    weights ./= sum_w
+
+    # 6. Échantillonnage
     return sample(1:n, Weights(weights), m; replace=false)
 end

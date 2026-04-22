@@ -48,7 +48,8 @@ function sgd_loo_optim(n::Int, m::Int; lr=0.02, max_iter=2000, beta1=0.9, beta2=
     return X, history
 end
 
-function sgd_loo(m::Int, n::Int; lr=0.01, max_iter=2000, strategy=:boltzmann)
+function sgd_loo(m::Int, n::Int; lr=0.01, max_iter=2000, strategy=:boltzmann) #TODO : afficher la config au fur et à mesure, pour chaque point nb de sélections
+    # visualisations interactives histo 15/16 avril mais su rle disque #TODO
     X = random_configuration(n)
     history = Float64[]
     current_lr = lr
