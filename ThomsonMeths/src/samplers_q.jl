@@ -106,3 +106,65 @@ function take_random_subset_boltzmann(Y::Matrix{Float64}, m::Int; beta=2.0)
     
     return active_indices
 end
+
+function take_random_subset_bp(Y::Matrix{Float64}, m::Int; tau=0.5, max_iter=100, damping=0.9)
+    n = size(Y, 2)
+    if m <= 0 return Int[] end
+    if m >= n return collect(1:n) end
+
+    # 1. Calcul de la matrice d'interactions H du sous-ensemble actuel
+    H = zeros(n, n)
+    for i in 1:n
+        for j in (i+1):n
+            dist = norm(Y[:, i] - Y[:, j])
+            H[i, j] = H[j, i] = 1.0 / dist
+        end
+    end
+
+    # 2. Initialisation des paramètres de Belief Propagation
+    J = -H ./ 4.0
+    for i in 1:n J[i, i] = 0.0 end
+    
+    h_base = [-sum(H[i, j] for j in 1:n if j != i) / 4.0 for i in 1:n]
+    magnetization_target = 2m - n
+    
+    u = zeros(n, n)
+    u_new = zeros(n, n)
+    mu = 0.0
+
+    # 3. Exécution de BP (Min-Sum approché) pour évaluer les points
+    for iter in 1:max_iter
+        total_u_in = [sum(u[k, i] for k in 1:n if k != i) for i in 1:n]
+        m_est = sum(clamp(h_base[i] + mu + total_u_in[i], -1.0, 1.0) for i in 1:n)
+        mu += 0.1 * (magnetization_target - m_est)
+
+        for i in 1:n, j in 1:n
+            if i == j continue end
+            cavity_field_i = h_base[i] + mu + total_u_in[i] - u[j, i]
+            u_new[i, j] = sign(J[i, j]) * sign(cavity_field_i) * min(abs(J[i, j]), abs(cavity_field_i))
+        end
+
+        diff = norm(u_new - u)
+        u = damping * u .+ (1 - damping) * u_new
+        
+        if diff < 1e-3
+            break
+        end
+    end
+
+    # 4. Calcul des croyances (Beliefs)
+    # Plus la croyance est élevée, plus le point a sa place dans la configuration optimale
+    beliefs = zeros(n)
+    for i in 1:n
+        beliefs[i] = h_base[i] + mu + sum(u[k, i] for k in 1:n if k != i)
+    end
+
+    # 5. Conversion en probabilités via Softmax
+    # On soustrait le maximum pour éviter les débordements numériques (NaN) de l'exponentielle
+    max_b = maximum(beliefs)
+    weights = exp.((beliefs .- max_b) ./ tau)
+    weights ./= sum(weights)
+
+    # 6. Tirage aléatoire sans remise basé sur les poids calculés
+    return sample(1:n, Weights(weights), m; replace=false)
+end

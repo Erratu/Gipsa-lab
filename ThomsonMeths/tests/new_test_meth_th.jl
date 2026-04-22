@@ -1,4 +1,4 @@
-using IsingSimu
+using ThomsonMeths
 using Printf 
 using LinearAlgebra 
 using Random 
@@ -129,7 +129,7 @@ function comparaison_and_save(m, n)
     t_gs = @elapsed idx_gs, E_gs = methode_gumbel_softmax(H, m)
     println("Gumbel-Softmax: E = $(round(E_gs, digits=6)) | Temps = $(round(t_gs, digits=5)) s")
 
-    t_diff = @elapsed X_optimal, _ = sgd_diffusion_measure(m)
+    t_diff = @elapsed X_optimal, _ = sgd_diffusion_measure(m, n_large=300, max_iter=3000, burn_in=1000)
     E_diff = evaluer_energie(H, X_optimal)
     println("Diffusion Measure: E = $(round(E_diff, digits=6)) | Temps = $(round(t_diff, digits=5)) s")
 

@@ -1,6 +1,6 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.12.5"
+julia_version = "1.12.4"
 manifest_format = "2.0"
 project_hash = "ac774608104c59cb2fcf88eab33077aa37b576f5"
 
@@ -1597,7 +1597,7 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 version = "1.11.0"
 
 [[deps.ThomsonMeths]]
-deps = ["ADTypes", "Clustering", "Combinatorics", "Distributions", "ForwardDiff", "Interpolations", "Ipopt", "JuMP", "LinearAlgebra", "Manifolds", "Manopt", "Optim", "Plots", "Printf", "Random", "SparseArrays", "Statistics", "StatsBase", "Test", "Zygote"]
+deps = ["ADTypes", "Clustering", "Combinatorics", "Distributions", "ForwardDiff", "Interpolations", "Ipopt", "JuMP", "LinearAlgebra", "Manifolds", "Manopt", "Optim", "PTShared", "Plots", "Printf", "Random", "SparseArrays", "Statistics", "StatsBase", "Test", "Zygote"]
 path = "."
 uuid = "9bc2b1a9-9b35-4c89-93d9-fac7577c5532"
 version = "0.1.0"

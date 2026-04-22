@@ -2,7 +2,7 @@ import GLMakie as GL
 using Printf 
 using Random
 using LinearAlgebra
-using IsingSimu
+using ThomsonMeths
 
 function align_smart_symmetry!(X::Matrix{Float64})
     n = size(X, 2)

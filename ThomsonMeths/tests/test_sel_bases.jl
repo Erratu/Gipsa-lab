@@ -1,4 +1,4 @@
-using IsingSimu
+using ThomsonMeths
 using Test, Printf, LinearAlgebra, Random, StatsBase
 
 function bp_ising_min_sum(J::Matrix{Float64}, h::Vector{Float64}; max_iter=100)

@@ -3,7 +3,7 @@ using LinearAlgebra
 using Statistics
 using Printf 
 using Random
-using IsingSimu
+using ThomsonMeths
 
 # Calcule une distance invariante par rotation et permutation entre deux configurations
 function invariant_distance(X1::Matrix{Float64}, X2::Matrix{Float64})

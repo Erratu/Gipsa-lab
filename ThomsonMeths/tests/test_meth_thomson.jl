@@ -1,4 +1,4 @@
-using IsingSimu
+using ThomsonMeths
 using Printf 
 using LinearAlgebra 
 using Random 

@@ -62,6 +62,8 @@ function sgd_loo(m::Int, n::Int; lr=0.01, max_iter=2000, strategy=:boltzmann)
             batch_idx = take_random_subset_boltzmann(X, m, beta=2.0)
         elseif strategy == :dpp
             batch_idx = take_random_subset_dpp(X, m, iter=10) # iter réduit pour la vitesse
+        elseif strategy == :bp
+            batch_idx = take_random_subset_bp(X, m, tau=0.5)
         end
         
         grad = Zygote.gradient(thomson_energy, X[:, batch_idx])[1] 

@@ -2,7 +2,7 @@
 
 julia_version = "1.12.4"
 manifest_format = "2.0"
-project_hash = "2f6950bc71a9e56a095f7ca1feb2185b3982c3ad"
+project_hash = "7f70305508b10b41216c8ce13c60c72659f163ec"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "f7304359109c768cf32dc5fa2d371565bb63b68a"
@@ -660,7 +660,7 @@ uuid = "92d709cd-6900-40b7-9082-c6be49f344b6"
 version = "0.2.6"
 
 [[deps.IsingSimu]]
-deps = ["ADTypes", "Combinatorics", "Distributions", "ForwardDiff", "Interpolations", "Ipopt", "JuMP", "LinearAlgebra", "Manifolds", "Manopt", "Optim", "Plots", "Printf", "Random", "SparseArrays", "Statistics", "StatsBase", "Test", "Zygote"]
+deps = ["ADTypes", "Clustering", "Combinatorics", "Distributions", "ForwardDiff", "Interpolations", "Ipopt", "JuMP", "LinearAlgebra", "Manifolds", "Manopt", "Optim", "Plots", "Printf", "Random", "SparseArrays", "Statistics", "StatsBase", "Test", "Zygote"]
 path = "."
 uuid = "7092925b-092b-4279-9130-9b48b948f654"
 version = "0.1.0"
@@ -1163,6 +1163,11 @@ weakdeps = ["StatsBase"]
 
     [deps.PDMats.extensions]
     StatsBaseExt = "StatsBase"
+
+[[deps.PTShared]]
+path = "../PTShared"
+uuid = "354f03c5-9646-4f6a-a7c6-b4adf2e56586"
+version = "0.1.0"
 
 [[deps.Pango_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "FriBidi_jll", "Glib_jll", "HarfBuzz_jll", "JLLWrappers", "Libdl"]

@@ -1,4 +1,4 @@
-using IsingSimu
+using PTShared
 
 using Distributions, Plots, Random
 
