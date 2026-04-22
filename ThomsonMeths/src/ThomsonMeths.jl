@@ -3,6 +3,7 @@ module ThomsonMeths
 using LinearAlgebra, Statistics, Interpolations, SparseArrays # Ising
 using Optim, JuMP, Ipopt, Zygote, Manopt, Random, ADTypes # Thomson
 using Printf, Combinatorics, Plots, StatsBase, Clustering # New meth
+using PTShared
 
 include("min_e_thomson.jl")
 include("thomson_functions.jl")
