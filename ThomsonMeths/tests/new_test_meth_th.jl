@@ -286,9 +286,10 @@ function plot_performances_n_m_and_save(plages_m::AbstractVector{Int}, max_k_ext
         for k in plages_k
             n = m + k
             
+            X = random_configuration(n) # Configuration de base pour ce n
             # 1. Base commune : Configuration partiellement relaxée de n points
             # On prend un nombre d'itérations réduit pour ne pas bloquer le benchmark global
-            X_base, _ = sgd_loo(m, n, max_iter=200, strategy=:uniform) 
+            X_base, _ = sgd_loo(X, m, n, max_iter=200, strategy=:uniform) 
             H_base = matrice_interactions(X_base)
             
             # --- Baseline : Tirage Aléatoire (Pire cas) ---
@@ -365,11 +366,11 @@ function run_all_experiments()
 
     #plot_scaling_n_and_save(m_test)
 
-    #plot_performances_n_m_and_save([20, 46, 80], 8)
+    plot_performances_n_m_and_save([20, 46, 80], 8)
 
-    test_sampling_diversity_and_video(46, 50, :boltzmann)
-    test_sampling_diversity_and_video(46, 50, :bp)
-    test_sampling_diversity_and_video(46, 50, :uniform)
+    #test_sampling_diversity_and_video(46, 50, :boltzmann)
+    #test_sampling_diversity_and_video(46, 50, :bp)
+    #test_sampling_diversity_and_video(46, 50, :uniform)
     
     println("\n=== Toutes les expériences sont terminées ===")
     println("Tous les graphiques ont été générés dans le dossier : ./$OUT_DIR/")
