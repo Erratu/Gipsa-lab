@@ -1,73 +1,64 @@
-# Ici m est le nombre de points à retirer, je me suis trompée
-function take_random_subset_dpp(Y::Matrix{Float64}, m::Int; iter=1000, gamma=2.0)
+function take_random_subset_dpp_opt(Y::Matrix{Float64}, m::Int; gamma=1.0, iter=10000)
     n = size(Y, 2)
-    if m <= 0 return Int[] end
     if m >= n return collect(1:n) end
-
-    # 1. Construction optimisée de L
-    # Utilisation de abs2 et @views pour éviter les allocations de tableaux intermédiaires
+    
+    # 1. Précalcul de la matrice noyau L (Une seule fois !)
     L = zeros(n, n)
     for i in 1:n
-        for j in i:n # On ne calcule que la moitié (symétrie)
-            dist_sq = sum(abs2, @views Y[:, i] .- Y[:, j])
-            val = exp(-gamma * dist_sq)
-            L[i, j] = val
-            L[j, i] = val
+        for j in (i+1):n
+            # Distances au carré pour le DPP
+            d2 = sum(abs2, view(Y, :, i) .- view(Y, :, j))
+            L[i, j] = L[j, i] = exp(-gamma * d2)
         end
+        # Stabilité numérique sur la diagonale
+        L[i, i] = 1.0 + 1e-8 
     end
 
-    current_subset = randperm(n)[1:m]
-    L_sub = zeros(m, m) # Buffer pré-alloué
+    # 2. Initialisation (Séparation des actifs et exclus)
+    S = collect(1:m)          # Les points gardés
+    Sc = collect((m+1):n)     # Les points exclus
     
-    # Fonction pour mettre à jour le buffer sans créer de nouvelle matrice
-    function update_L_sub!(sub_idx)
-        for i in 1:m, j in 1:m
-            @inbounds L_sub[i, j] = L[sub_idx[i], sub_idx[j]]
+    # 3. Pré-allocation du Buffer (Le secret de la vitesse : aucune allocation dans la boucle)
+    buffer = zeros(m, m)
+    
+    # Fonction interne ultra-rapide pour évaluer le "volume" (déterminant)
+    function log_det_S!(current_S)
+        @inbounds for i in 1:m, j in 1:m
+            buffer[i, j] = L[current_S[i], current_S[j]]
         end
+        # Cholesky est O(m^3) mais environ 3x plus rapide que det(), et logdet évite les underflows
+        C = cholesky!(Symmetric(buffer); check=false) 
+        return issuccess(C) ? logdet(C) : -Inf
     end
 
-    update_L_sub!(current_subset)
-    # L'utilisation de Symmetric() permet à Julia d'utiliser la factorisation 
-    # de Cholesky (O(m^3/3)), beaucoup plus rapide et stable que la LU par défaut.
-    current_det = det(Symmetric(L_sub))
-    
-    while current_det < 1e-12
-        current_subset = randperm(n)[1:m]
-        update_L_sub!(current_subset)
-        current_det = det(Symmetric(L_sub))
-    end
+    # Évaluation initiale
+    current_logdet = log_det_S!(S)
 
-    # 2. Boucle MCMC sans aucune allocation mémoire
+    # 4. Chaîne de Markov (Metropolis-Hastings)
     for _ in 1:iter
-        idx_to_replace = rand(1:m)
-        old_u = current_subset[idx_to_replace]
+        # Tirage d'un échange (Swap)
+        idx_in = rand(1:m)           # Un point à retirer de S
+        idx_out = rand(1:(n-m))      # Un point à injecter depuis Sc
         
-        v = rand(1:n)
-        while v in current_subset
-            v = rand(1:n)
-        end
+        # On fait l'échange
+        S[idx_in], Sc[idx_out] = Sc[idx_out], S[idx_in]
         
-        # Mutation en place (on évite le copy())
-        current_subset[idx_to_replace] = v
-        update_L_sub!(current_subset)
+        # Nouvelle évaluation
+        new_logdet = log_det_S!(S)
         
-        proposed_det = det(Symmetric(L_sub))
+        # Ratio d'acceptation de Metropolis (en log pour la stabilité)
+        log_alpha = new_logdet - current_logdet
         
-        ratio = proposed_det / current_det
-        
-        if rand() < ratio
-            # Accepté
-            current_det = proposed_det
+        if log_alpha >= 0.0 || rand() < exp(log_alpha)
+            # Accepté ! On garde l'échange
+            current_logdet = new_logdet
         else
-            # Rejeté : on restaure l'ancien état (rollback en place)
-            current_subset[idx_to_replace] = old_u
+            # Refusé : Rollback (on annule l'échange, O(1))
+            S[idx_in], Sc[idx_out] = Sc[idx_out], S[idx_in]
         end
     end
-    
-    # Maj final de L_sub pour s'assurer que l'état correspond bien à current_subset
-    # update_L_sub!(current_subset) # Décommenter si L_sub doit être renvoyé plus tard
-    
-    return current_subset
+
+    return S
 end
 
 function take_random_subset_boltzmann(Y::Matrix{Float64}, m::Int; beta=2.0)
@@ -96,7 +87,7 @@ function take_random_subset_boltzmann(Y::Matrix{Float64}, m::Int; beta=2.0)
             energies[i] = E_i
         end
 
-        weights = exp.(beta .* (energies .- maximum(energies))) # caractériser la loi selon laquelle j'échantillone, la loi de ce qui reste après les k enlevés, la loi ce qu'on peut dire dessus #TODO
+        weights = exp.(beta .* (energies .- maximum(energies)))
         weights ./= sum(weights)
         
         idx_to_remove_local = sample(1:current_n, Weights(weights)) 
@@ -107,66 +98,83 @@ function take_random_subset_boltzmann(Y::Matrix{Float64}, m::Int; beta=2.0)
     return active_indices
 end
 
-function take_random_subset_bp(Y::Matrix{Float64}, m::Int; tau=0.5, max_iter=100, damping=0.9)
+function take_random_subset_bp(Y::Matrix{Float64}, m::Int; beta=2.0, tau=0.5, max_iter=100, damping=0.8)
     n = size(Y, 2)
     if m <= 0 return Int[] end
     if m >= n return collect(1:n) end
 
-    # 1. Calcul de la matrice d'interactions H du sous-ensemble actuel
+    # 1. Matrice d'interactions
     H = zeros(n, n)
-    for i in 1:n
-        for j in (i+1):n
-            dist = norm(Y[:, i] - Y[:, j])
-            H[i, j] = H[j, i] = 1.0 / dist
-        end
+    for i in 1:n, j in (i+1):n
+        H[i, j] = H[j, i] = 1.0 / norm(Y[:, i] - Y[:, j])
     end
 
-    # 2. Initialisation des paramètres de Belief Propagation
-    J = -H ./ 4.0
-    for i in 1:n J[i, i] = 0.0 end
+    U = zeros(n, n) # U[i, j] = message envoyé par i à j (en log-odds)
+    U_new = zeros(n, n)
+    mu = 0.0 # Potentiel chimique global pour cibler m points
+    sum_U = zeros(n)
+    p = zeros(n)
     
-    h_base = [-sum(H[i, j] for j in 1:n if j != i) / 4.0 for i in 1:n]
-    magnetization_target = 2m - n
-    
-    u = zeros(n, n)
-    u_new = zeros(n, n)
-    mu = 0.0
-
-    # 3. Exécution de BP (Min-Sum approché) pour évaluer les points
     for iter in 1:max_iter
-        total_u_in = [sum(u[k, i] for k in 1:n if k != i) for i in 1:n]
-        m_est = sum(clamp(h_base[i] + mu + total_u_in[i], -1.0, 1.0) for i in 1:n)
-        mu += 0.1 * (magnetization_target - m_est)
-
-        for i in 1:n, j in 1:n
-            if i == j continue end
-            cavity_field_i = h_base[i] + mu + total_u_in[i] - u[j, i]
-            u_new[i, j] = sign(J[i, j]) * sign(cavity_field_i) * min(abs(J[i, j]), abs(cavity_field_i))
-        end
-
-        diff = norm(u_new - u)
-        u = damping * u .+ (1 - damping) * u_new
+        # Somme des messages entrants pour chaque point (son "champ" actuel)
+        sum!(sum_U', U)
         
-        if diff < 1e-3
-            break
+        # Ajustement de mu pour cibler m points (les probabilités marginales doivent sommer à m)
+        @. p = 1.0 / (1.0 + exp(-(mu + sum_U)))
+        mu += 0.2 * (m - sum(p)) 
+
+        # Calcul des nouveaux messages
+        @inbounds for i in 1:n, j in 1:n
+            if i == j continue end
+            
+            # Champ cavité : ce que 'i' ressent de tout le monde SAUF de 'j'
+            cavity_field = mu + sum_U[i] - U[j, i]
+            
+            # Formule exacte Sum-Product (avec prévention d'overflow numérique)
+            if cavity_field > 50.0 
+                # i est certain d'être gardé : il envoie sa répulsion maximale à j
+                U_new[i, j] = -beta * H[i, j]
+            elseif cavity_field < -50.0
+                # i est certain d'être exclu : il n'envoie aucune répulsion à j
+                U_new[i, j] = 0.0
+            else
+                # Régime probabiliste standard
+                exp_cav = exp(cavity_field)
+                U_new[i, j] = log((exp(-beta * H[i, j]) * exp_cav + 1.0) / (exp_cav + 1.0))
+            end
         end
+
+        if norm(U_new - U) < 1e-4 break end
+        U = damping * U .+ (1 - damping) * U_new
     end
 
-    # 4. Calcul des croyances (Beliefs)
-    # Plus la croyance est élevée, plus le point a sa place dans la configuration optimale
+    # 3. Calcul des croyances finales (en log-odds)
     beliefs = zeros(n)
     for i in 1:n
-        beliefs[i] = h_base[i] + mu + sum(u[k, i] for k in 1:n if k != i)
+        beliefs[i] = mu + sum(U[:, i])
     end
 
-    # 5. Conversion en probabilités via Softmax
-    # On soustrait le maximum pour éviter les débordements numériques (NaN) de l'exponentielle
-    max_b = maximum(beliefs)
-    weights = exp.((beliefs .- max_b) ./ tau)
-    weights ./= sum(weights)
+    # 4. Décimation séquentielle avec soulagement
+    active = collect(1:n)
+    current_beliefs = copy(beliefs)
+    
+    for _ in 1:(n - m)
+        # On exclut séquentiellement (pires croyances = plus fortes probabilités d'exclusion)
+        min_b = minimum(current_beliefs[active])
+        w_remove = exp.(-(current_beliefs[active] .- min_b) ./ tau)
+        w_remove ./= sum(w_remove)
+        
+        idx_local = sample(1:length(active), Weights(w_remove))
+        idx_global = active[idx_local]
+        deleteat!(active, idx_local)
+        
+        # le point idx_global disparaît, on retire sa répulsion aux autres
+        for voisin in active
+            current_beliefs[voisin] += beta * H[idx_global, voisin]
+        end
+    end
 
-    # 6. Tirage aléatoire sans remise basé sur les poids calculés
-    return sample(1:n, Weights(weights), m; replace=false) # Regarder ce que ça fait exactement #TODO
+    return active
 end
 
 function take_random_subset_bp_opt(Y::Matrix{Float64}, m::Int; tau=0.5, max_iter=100, damping=0.9)

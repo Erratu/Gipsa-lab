@@ -13,14 +13,16 @@ mkpath(OUT_DIR)
 
 function benchmark_q_distributions_and_save(m, n)
     println("\n--- Lancement du Benchmark des distributions q pour m=$m, n=$n ---")
+
+    X = random_configuration(n)
     
-    t_uni = @elapsed _, hist_uni = sgd_loo(m, n, strategy=:uniform)
+    t_uni = @elapsed _, hist_uni = sgd_loo(X, m, n, strategy=:uniform)
     println("Temps sgd_loo (Uniforme)  : $(round(t_uni, digits=5)) s")
     
-    t_boltz = @elapsed _, hist_boltz = sgd_loo(m, n, strategy=:boltzmann)
+    t_boltz = @elapsed _, hist_boltz = sgd_loo(X, m, n, strategy=:boltzmann)
     println("Temps sgd_loo (Boltzmann) : $(round(t_boltz, digits=5)) s")
     
-    t_bp = @elapsed _, hist_bp = sgd_loo(m, n, strategy=:bp)
+    t_bp = @elapsed _, hist_bp = sgd_loo(X, m, n, strategy=:bp)
     println("Temps sgd_loo (BP)       : $(round(t_bp, digits=5)) s")
     
     p = plot(hist_uni, label="Uniforme", linewidth=2)
@@ -123,7 +125,7 @@ end
 # Comparaison Globale des Méthodes
 function comparaison_and_save(m, n)
     println("\n--- Lancement de la Comparaison des méthodes (m=$m, n=$n) ---")
-    t_sgd = @elapsed X_final, history = sgd_loo(m, n)
+    t_sgd = @elapsed X_final, history = sgd_loo(X, m, n)
     println("Config n trouvée. Temps = $(round(t_sgd, digits=5)) s")
     
     H = matrice_interactions(X_final)
@@ -193,7 +195,7 @@ function plot_scaling_n_and_save(m_cible; max_n_extra=10)
         @printf("Calcul pour n = %d...\n", n)
         
         # 1. Base commune : On génère d'abord une configuration stable de n points
-        X_base, _ = sgd_loo(m, n) 
+        X_base, _ = sgd_loo(X, m, n)
         H_base = matrice_interactions(X_base)
         
         # --- Méthode 1 : Heuristique (Glouton) ---
@@ -233,12 +235,120 @@ function plot_scaling_n_and_save(m_cible; max_n_extra=10)
     println("-> Graphique de scalabilité sauvegardé : $filepath")
 end
 
+function test_sampling_diversity_and_video(m, n, strat=:boltzmann)
+    println("\n--- Test de diversité d'échantillonnage ($strat) ---")
+    
+    X = random_configuration(n)
+    video_file = joinpath(OUT_DIR, "sgd_evolution_$strat.mp4")
+    
+    # On lance sgd_loo avec l'enregistrement vidéo activé
+    t = @elapsed X_final, history, counts = sgd_loo(X, m, n, strategy=strat, record_video=true, video_path=video_file)
+    println("Temps d'exécution : $(round(t, digits=2)) s")
+    
+    # Création du graphique des sélections
+    p = bar(1:n, counts, 
+        title="Nombre de sélections par point ($strat)\n(m=$m, n=$n, 2000 iters)",
+        xlabel="Indice du point (1 à $n)",
+        ylabel="Nombre de fois sélectionné",
+        legend=false,
+        color=:teal,
+        bar_width=0.8
+    )
+    
+    # On ajoute une ligne horizontale pour la moyenne théorique
+    # Si on tire m points parmi n à chaque itération uniforme, la moyenne est (m/n) * max_iter
+    moyenne_theo = (m / n) * 2000
+    hline!(p, [moyenne_theo], color=:red, linestyle=:dash, label="Moyenne (Uniforme)")
+    
+    filepath_bar = joinpath(OUT_DIR, "selection_counts_$strat.png")
+    savefig(p, filepath_bar)
+    println("-> Graphique des sélections sauvegardé : $filepath_bar")
+end
+
+function plot_performances_n_m_and_save(plages_m::AbstractVector{Int}, max_k_extra::Int=8)
+    println("\n--- Benchmark Global 2D : Performances des Sélections (m et n variables) ---")
+    
+    # On va utiliser "k" comme variable d'axe X (k = n - m, le nombre de points à rejeter)
+    plages_k = 1:max_k_extra
+    
+    # On prépare un grand graphique contenant des sous-graphiques (un par valeur de m)
+    plots_energie = []
+    plots_temps = []
+    
+    for m in plages_m
+        @printf("-> Calculs pour la cible m = %d...\n", m)
+        
+        E_heu = Float64[]; T_heu = Float64[]
+        E_gs  = Float64[]; T_gs  = Float64[]
+        E_bp  = Float64[]; T_bp  = Float64[]
+        E_rnd = Float64[]; # Référence aléatoire (sans optimisation)
+        
+        for k in plages_k
+            n = m + k
+            
+            # 1. Base commune : Configuration partiellement relaxée de n points
+            # On prend un nombre d'itérations réduit pour ne pas bloquer le benchmark global
+            X_base, _ = sgd_loo(m, n, max_iter=200, strategy=:uniform) 
+            H_base = matrice_interactions(X_base)
+            
+            # --- Baseline : Tirage Aléatoire (Pire cas) ---
+            idx_rnd = randperm(n)[1:m]
+            push!(E_rnd, evaluer_energie(H_base, idx_rnd))
+
+            # --- Méthode 1 : Heuristique (Glouton) ---
+            t1 = @elapsed _, e1 = methode_heuristique(H_base, m)
+            push!(E_heu, e1)
+            push!(T_heu, t1)
+            
+            # --- Méthode 2 : Gumbel-Softmax ---
+            # On baisse n_starts pour le benchmark pour gagner du temps
+            t2 = @elapsed _, e2 = methode_gumbel_softmax(H_base, m, n_starts=3)
+            push!(E_gs, e2)
+            push!(T_gs, t2)
+
+            # --- Méthode 3 : Belief Propagation ---
+            t3 = @elapsed _, e3 = methode_belief_propagation(H_base, m, max_iter=100)
+            push!(E_bp, e3)
+            push!(T_bp, t3)
+        end
+        
+        # --- Création des sous-graphiques pour ce m ---
+        
+        # 1. Graphique d'Énergie (On trace l'écart par rapport au tirage aléatoire pour y voir clair)
+        p_e = plot(plages_k, E_rnd .- E_heu, label="Heuristique", marker=:circle, linewidth=2, color=:limegreen)
+        plot!(p_e, plages_k, E_rnd .- E_gs, label="Gumbel-Softmax", marker=:square, linewidth=2, color=:orange)
+        plot!(p_e, plages_k, E_rnd .- E_bp, label="Belief Prop.", marker=:diamond, linewidth=2, color=:purple,
+              title="Gain d'Énergie (m=$m)", ylabel="Gain vs Aléatoire", xlabel="Points rejetés (k = n - m)", 
+              legend=(m == plages_m[1] ? :topleft : false), gridalpha=0.4)
+        push!(plots_energie, p_e)
+              
+        # 2. Graphique de Temps
+        p_t = plot(plages_k, T_heu .+ 1e-6, label="Heuristique", marker=:circle, linewidth=2, color=:limegreen)
+        plot!(p_t, plages_k, T_gs .+ 1e-6, label="Gumbel-Softmax", marker=:square, linewidth=2, color=:orange)
+        plot!(p_t, plages_k, T_bp .+ 1e-6, label="Belief Prop.", marker=:diamond, linewidth=2, color=:purple,
+              title="Temps d'exécution (m=$m)", ylabel="Temps (s) [Log]", xlabel="Points rejetés (k)", 
+              yaxis=:log10, legend=false, gridalpha=0.4)
+        push!(plots_temps, p_t)
+    end
+    
+    # --- Assemblage Final ---
+    # On empile les graphes d'énergie en haut, et de temps en bas
+    p_final_energie = plot(plots_energie..., layout=(1, length(plages_m)), size=(400 * length(plages_m), 350))
+    p_final_temps = plot(plots_temps..., layout=(1, length(plages_m)), size=(400 * length(plages_m), 350))
+    
+    p_global = plot(p_final_energie, p_final_temps, layout=(2, 1), size=(400 * length(plages_m), 750), margin=5Plots.mm)
+    
+    filepath = joinpath(OUT_DIR, "6_performances_n_m.png")
+    savefig(p_global, filepath)
+    println("-> Graphique 2D de performances sauvegardé : $filepath")
+end
+
 # script d'exécution de tous les tests
 function run_all_experiments()
     m_test = 46
     
     # 1. Comparaison des distributions q (Leave-one-out strict: n = m + 1)
-    benchmark_q_distributions_and_save(m_test, m_test + 1)
+    #benchmark_q_distributions_and_save(m_test, m_test + 1)
     
     # 2. Diffusion SGD et BLASSO
     # Note: On utilise un n_large plus petit (ex: 150) si 300 est trop lent
@@ -253,7 +363,13 @@ function run_all_experiments()
     # 5. Parallel Tempering (k_max = 5 "températures" exploratoires)
     #run_and_plot_parallel_tempering(m_test, 5)
 
-    plot_scaling_n_and_save(m_test)
+    #plot_scaling_n_and_save(m_test)
+
+    #plot_performances_n_m_and_save([20, 46, 80], 8)
+
+    test_sampling_diversity_and_video(46, 50, :boltzmann)
+    test_sampling_diversity_and_video(46, 50, :bp)
+    test_sampling_diversity_and_video(46, 50, :uniform)
     
     println("\n=== Toutes les expériences sont terminées ===")
     println("Tous les graphiques ont été générés dans le dossier : ./$OUT_DIR/")

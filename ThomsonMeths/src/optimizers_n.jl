@@ -48,8 +48,7 @@ function sgd_loo_optim(n::Int, m::Int; lr=0.02, max_iter=2000, beta1=0.9, beta2=
     return X, history
 end
 
-function sgd_loo(m::Int, n::Int; lr=0.01, max_iter=2000, strategy=:boltzmann) #TODO : afficher la config au fur et à mesure, pour chaque point nb de sélections
-    # visualisations interactives histo 15/16 avril mais su rle disque #TODO
+function sgd_loo_sans_visuel(m::Int, n::Int; lr=0.01, max_iter=2000, strategy=:boltzmann)
     X = random_configuration(n)
     history = Float64[]
     current_lr = lr
@@ -80,6 +79,83 @@ function sgd_loo(m::Int, n::Int; lr=0.01, max_iter=2000, strategy=:boltzmann) #T
         end
     end
     return X, history
+end
+
+function sgd_loo(X::Matrix{Float64}, m::Int, n::Int; lr=0.01, max_iter=2000, strategy=:boltzmann, record_video=false, video_path="sgd_evolution.mp4")
+    history = Float64[]
+    current_lr = lr
+    decay_rate = 0.999
+    
+    # Tableau pour compter les sélections de chaque point
+    selection_counts = zeros(Int, n)
+    
+    # Préparation de l'animation si demandée
+    local fig, ax, points_obs, colors_obs, record_stream
+    if record_video
+        fig = GL.Figure(size = (800, 800))
+        ax = GL.LScene(fig[1, 1], show_axis=false)
+        GL.mesh!(ax, GL.Sphere(GL.Point3f(0), 0.95f0), color=(:white, 0.2), transparency=true)
+        
+        # Variables réactives (Observables) pour Makie
+        points_obs = GL.Observable([GL.Point3f(X[:, i]...) for i in 1:n])
+        colors_obs = GL.Observable([:gray for _ in 1:n]) # Gris = non sélectionné, Rouge = sélectionné
+        
+        GL.scatter!(ax, points_obs, color=colors_obs, markersize=15)
+        
+        # Initialisation du flux vidéo
+        record_stream = GL.VideoStream(fig, format="mp4", framerate=30)
+    end
+    
+    for iter in 1:max_iter 
+        # Choix de la distribution q
+        if strategy == :uniform
+            batch_idx = randperm(n)[1:m]
+        elseif strategy == :boltzmann
+            batch_idx = take_random_subset_boltzmann(X, m, beta=2.0)
+        elseif strategy == :dpp
+            batch_idx = take_random_subset_dpp(X, m, iter=10)
+        elseif strategy == :bp
+            batch_idx = take_random_subset_bp(X, m, tau=0.5)
+        end
+        
+        # Mise à jour des compteurs
+        selection_counts[batch_idx] .+= 1
+        
+        grad = Zygote.gradient(thomson_energy, X[:, batch_idx])[1] 
+        X[:, batch_idx] .-= current_lr .* grad
+
+        for i in batch_idx
+            X[:, i] ./= norm(X[:, i])
+        end
+
+        current_lr *= decay_rate
+        
+        if iter % 10 == 0
+            push!(history, thomson_energy(X[:, batch_idx]))
+        end
+        
+        # Mise à jour de la frame vidéo (on n'enregistre pas forcément à chaque itération pour éviter une vidéo trop longue, par ex toutes les 5 itérations)
+        if record_video && iter % 5 == 0
+            # Mettre à jour les positions réactives
+            points_obs[] = [GL.Point3f(X[:, i]...) for i in 1:n]
+            
+            # Mettre en surbrillance les points du batch actuel
+            new_colors = [:gray for _ in 1:n]
+            for idx in batch_idx
+                new_colors[idx] = :red
+            end
+            colors_obs[] = new_colors
+            
+            GL.recordframe!(record_stream)
+        end
+    end
+    
+    if record_video
+        GL.save(video_path, record_stream)
+        @info "Vidéo sauvegardée : $video_path"
+    end
+    
+    return X, history, selection_counts
 end
 
 function sgd_diffusion_measure(n_target::Int; n_large::Int=1000, gamma::Float64=0.005, max_iter::Int=5000, burn_in::Int=2000)

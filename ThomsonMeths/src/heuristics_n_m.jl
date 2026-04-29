@@ -61,29 +61,6 @@ function methode_heuristique(H, n)
     return selected, evaluer_energie(H, selected)
 end
 
-# Relaxation Continue (JuMP + Ipopt avec Spectral Shift) : spectral shift force tout à n/m
-function methode_relaxation_jump(H, n) # mauvais résultat
-    m = size(H, 1)
-    
-    eigvals_H = eigvals(Symmetric(H))
-    lambda_shift = minimum(eigvals_H) < 0 ? abs(minimum(eigvals_H)) + 1e-3 : 0.0
-    H_psd = H + lambda_shift * I
-    
-    model = Model(Ipopt.Optimizer)
-    set_silent(model)
-    
-    @variable(model, 0 <= epsilon[1:m] <= 1)
-    @constraint(model, sum(epsilon) == n)
-    @objective(model, Min, 0.5 * sum(epsilon[i] * H_psd[i, j] * epsilon[j] for i in 1:m, j in 1:m) - 0.5 * lambda_shift * sum(epsilon))
-    
-    optimize!(model)
-    
-    eps_opt = value.(epsilon)
-    best_idx = sortperm(eps_opt, rev=true)[1:n]
-    
-    return best_idx, evaluer_energie(H, best_idx)
-end
-
 # BP
 function methode_belief_propagation(H, n; max_iter=500, damping=0.9)
     m = size(H, 1)
@@ -157,103 +134,6 @@ function methode_belief_propagation(H, n; max_iter=500, damping=0.9)
     return best_idx, E_min
 end
 
-# BP avec post-processing pour corriger l'erreur de décimation
-function methode_belief_propagation_post_process(H, n; max_iter=500, damping=0.9)
-    m = size(H, 1)
-    
-    # Changement de variable
-    J = -H ./ 4.0
-    for i in 1:m 
-        J[i, i] = 0.0 
-    end 
-
-    h_base = [-sum(H[i, j] for j in 1:m if j != i) / 4.0 for i in 1:m]
-    magnetization_target = 2n - m 
-    
-    best_idx = Int[]
-
-    # On initialise les messages une seule fois pour gagner du temps
-    u = zeros(m, m)
-    u_new = zeros(m, m)
-
-    for step in 1:n
-        mu = 0.0 
-        
-        # BP min-sum lui-même
-        for iter in 1:max_iter
-            # Optimisation : On pré-calcule la somme de tous les messages entrants
-            total_u_in = [sum(u[k, i] for k in 1:m if k != i) for i in 1:m]
-            
-            m_est = sum(clamp(h_base[i] + mu + total_u_in[i], -1.0, 1.0) for i in 1:m)
-            mu += 0.1 * (magnetization_target - m_est) 
-            
-            for i in 1:m
-                for j in 1:m
-                    if i == j 
-                        continue 
-                    end
-                    
-                    # cavity trick : le champ total moins le message j
-                    cavity_field_i = h_base[i] + mu + total_u_in[i] - u[j, i]
-                    
-                    u_new[i, j] = sign(J[i, j]) * sign(cavity_field_i) * min(abs(J[i, j]), abs(cavity_field_i))
-                end
-            end
-            
-            diff = norm(u_new - u)
-            u = damping * u .+ (1 - damping) * u_new
-            
-            if diff < 1e-4
-                break
-            end
-        end
-        
-        # Croyances finales
-        beliefs = zeros(m)
-        for i in 1:m
-            if i in best_idx
-                beliefs[i] = -Inf
-            else
-                beliefs[i] = h_base[i] + mu + sum(u[k, i] for k in 1:m if k != i)
-            end
-        end
-        
-        chosen = argmax(beliefs)
-        push!(best_idx, chosen)
-        
-        h_base[chosen] = 1e6
-    end
-    
-    best_idx = best_idx[1:n] # mieux que sortperm, on fixe xi donc les probas suivantes le prennent en compte
-
-    # post-processing par recherche locale (swaps)
-    unselected = setdiff(1:m, best_idx)
-    improved = true
-    while improved
-        improved = false
-        best_delta, best_s_idx, best_u_idx = 0.0, 0, 0
-
-        for (i, s) in enumerate(best_idx), (j, u) in enumerate(unselected)
-            # delta = (Énergie si on ajoute 'u') - (Énergie si on enlève 's')
-            delta_E = sum(H[u, x] - H[s, x] for x in best_idx if x != s)
-            if delta_E < best_delta - 1e-7
-                best_delta, best_s_idx, best_u_idx = delta_E, i, j
-            end
-        end
-
-        if best_delta < -1e-7
-            # On corrige l'erreur de décimation de BP
-            best_idx[best_s_idx], unselected[best_u_idx] = unselected[best_u_idx], best_idx[best_s_idx]
-            improved = true
-        end
-    end
-
-    E_min = 0.5 * sum(H[i, j] for i in best_idx, j in best_idx)
-    return best_idx, E_min
-end
-
-# Reregarder #TODO
-# parfois presque le min, parfois très mauvais
 function methode_gumbel_softmax_it(H, n; epochs=1500, lr=0.1, tau=0.5, lambda_reg=5.0)
     m = size(H, 1)
     logits = randn(m) # Initialisation des préférences
@@ -305,4 +185,31 @@ function methode_gumbel_softmax(H, n; n_starts=10)
     end
     
     return best_idx, best_E
+end
+
+# MIQP avec Gurobi (Branch and Bound)
+function optimum_absolu_jump(H::Matrix{Float64}, m::Int)
+    n = size(H, 1)
+    
+    # Création du modèle
+    model = Model(Gurobi.Optimizer)
+    set_silent(model) # Pour éviter d'inonder la console
+    
+    # Variables strictement binaires
+    @variable(model, x[1:n], Bin)
+    
+    # Fonction objectif : E = somme des interactions si les deux points sont gardés
+    @objective(model, Min, sum(H[i, j] * x[i] * x[j] for i in 1:n, j in (i+1):n))
+    
+    # Contrainte : garder exactement m points
+    @constraint(model, sum(x) == m)
+    
+    # Résolution exacte
+    optimize!(model)
+    
+    # Récupération des résultats
+    config_finale = findall(val.(x) .> 0.5)
+    energie_minimale = objective_value(model)
+    
+    return config_finale, energie_minimale
 end

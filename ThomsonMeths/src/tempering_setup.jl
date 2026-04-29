@@ -30,7 +30,7 @@ function setup_pt_thomson(m::Int, k_max::Int)
     function local_update!(X, beta)
         current_n = size(X, 2)
         # 50 itérations de SGD pour relaxer la configuration
-        X_new, _ = sgd_loo(m, current_n, max_iter=50, strategy=:boltzmann)
+        X_new, _ = sgd_loo(X, m, current_n, max_iter=50, strategy=:boltzmann)
         return X_new
     end
     
