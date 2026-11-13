@@ -22,6 +22,6 @@ using Random
     end
 
     @testset "Subset Selection Bases" begin
-        include("../tests/test_sel_bases.jl")
+        include("test_sel_bases.jl")
     end
 end

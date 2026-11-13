@@ -7,7 +7,7 @@ function solve_pgd_fast(X0::Matrix{Float64}; lr::Float64=0.01, max_iter::Int=200
     history::Vector{Float64} = Float64[]
     sizehint!(history, max_iter)
     
-    for _::Int in 1:max_iter
+    for _ in 1:max_iter
         E::Float64 = thomson_energy_and_grad!(G, X)
         push!(history, E)
         
@@ -26,7 +26,7 @@ function solve_pgd_momentum_fast(X0::Matrix{Float64}; lr::Float64=0.01, beta::Fl
     G::Matrix{Float64} = similar(X)
     history::Vector{Float64} = Float64[]
     sizehint!(history, max_iter)
-    for _::Int in 1:max_iter
+    for _ in 1:max_iter
         E::Float64 = thomson_energy_and_grad!(G, X)
         push!(history, E)
         V .= beta .* V .+ (1 - beta) .* G
@@ -119,7 +119,7 @@ function solve_basin_hopping_fast(n::Int; n_steps::Int=500, temperature::Float64
         
         # On ne secoue que 1 à 3 particules au hasard
         num_to_kick::Int = rand(1:3) 
-        for _::Int in 1:num_to_kick
+        for _ in 1:num_to_kick
             idx::Int = rand(1:n)
             # Perturbation en place
             X_trial[1, idx] += amplitude_kick * randn()
