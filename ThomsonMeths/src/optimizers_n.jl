@@ -43,7 +43,7 @@ function sgd_loo_optim(n::Int, m::Int; lr=0.02, max_iter=2000, beta1=0.9, beta2=
         end
     end
 
-    println("Résultat Adam (Riemannien) pour m=$m : E = $(round(thomson_energy(X), digits=6))")
+    println("Adam (Riemannian) result pour m=$m : E = $(round(thomson_energy(X), digits=6))")
     
     return X, history
 end
@@ -152,7 +152,7 @@ function sgd_loo(X::Matrix{Float64}, m::Int, n::Int; lr=0.01, max_iter=2000, str
     
     if record_video
         GL.save(video_path, record_stream)
-        @info "Vidéo sauvegardée : $video_path"
+        @info "Video saved : $video_path"
     end
     
     return X, history, selection_counts
@@ -182,7 +182,7 @@ function sgd_diffusion_measure(n_target::Int; n_large::Int=1000, gamma::Float64=
         end
     end
 
-    @info "SGD a terminé son orbite stationnaire. Extraction des amas (BLASSO)"
+    @info "SGD stationary phase complete. Extracting clusters (BLASSO connection)"
     
     # Connexion avec BLASSO : Trouver les "Spikes" de la mesure
     # On rassemble toutes les particules vues pendant la phase stationnaire

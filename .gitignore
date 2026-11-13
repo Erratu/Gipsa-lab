@@ -1,0 +1,26 @@
+# Julia
+Manifest.toml
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+/deps/deps.jl
+/deps/build.log
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Data / outputs temporaires
+*.tmp
+*.bak
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/

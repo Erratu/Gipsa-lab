@@ -97,7 +97,7 @@ function solve_nrpt_fast(n::Int; n_burnin::Int=1000, n_sample::Int=3000, n_resta
 end
 
 function solve_basin_hopping_fast(n::Int; n_steps::Int=500, temperature::Float64=0.05, amplitude_kick::Float64=0.3)
-    @info "Lancement Basin-Hopping Optimisé (N=$n, Steps=$n_steps)"
+    @info "Starting optimized Basin-Hopping (N=$n, Steps=$n_steps)"
     
     # Initialisation et premier quench profond
     X_current::Matrix{Float64} = random_configuration(n)
@@ -155,7 +155,7 @@ function solve_basin_hopping_fast(n::Int; n_steps::Int=500, temperature::Float64
                 if E_deep < E_best
                     E_best = E_deep
                     X_best .= X_deep
-                    @info "Step $step: Nouveau record ! E = $(round(E_best, digits=6))"
+                    @info "Step $step: New record ! E = $(round(E_best, digits=6))"
                 end
                 # On met à jour l'état courant avec la géométrie parfaite
                 X_current .= X_deep 
@@ -167,7 +167,7 @@ function solve_basin_hopping_fast(n::Int; n_steps::Int=500, temperature::Float64
     end
     
     taux::Float64 = acceptances / n_steps
-    @info "Basin-Hopping terminé. Taux d'acceptation : $(round(taux * 100, digits=1))%"
+    @info "Basin-Hopping finished. Acceptance rate : $(round(taux * 100, digits=1))%"
     
     return X_best, history
 end
