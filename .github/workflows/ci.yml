@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['1.10', '1']
+        os: [ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+      - uses: julia-actions/cache@v2
+
+      - name: Test PTShared
+        run: |
+          julia --project=PTShared -e '
+            using Pkg
+            Pkg.instantiate()
+            Pkg.test()
+          '
+
+      - name: Test ThomsonMeths
+        run: |
+          julia --project=ThomsonMeths -e '
+            using Pkg
+            Pkg.develop(path="PTShared")
+            Pkg.instantiate()
+            Pkg.test()
+          '
