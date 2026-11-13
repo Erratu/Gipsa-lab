@@ -24,18 +24,17 @@ jobs:
 
       - name: Test PTShared
         run: |
-          julia --project=PTShared -e '
+          julia -e '
             using Pkg
-            Pkg.instantiate()
-            Pkg.test()
+            Pkg.develop(path="PTShared")
+            Pkg.test("PTShared")
           '
 
       - name: Test ThomsonMeths
         run: |
-          julia --project=ThomsonMeths -e '
+          julia -e '
             using Pkg
             Pkg.develop(path="PTShared")
-            Pkg.resolve()
-            Pkg.instantiate()
-            Pkg.test()
+            Pkg.develop(path="ThomsonMeths")
+            Pkg.test("ThomsonMeths")
           '
