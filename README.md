@@ -128,7 +128,19 @@ Pkg.develop(path="ThomsonMeths")
 Pkg.instantiate()
 ```
 
-### Quick Demo
+### Quick CLI Benchmark
+
+Run the comprehensive benchmark comparing all 4 algorithms directly from your terminal:
+
+```bash
+# Run quick benchmark with 10 particles
+julia --project=ThomsonMeths benchmark.jl 10
+
+# Run benchmark on Smale's 7th problem test case (e.g. 46 particles)
+julia --project=ThomsonMeths benchmark.jl 46
+```
+
+### Quick Demo in Julia REPL
 
 ```julia
 using ThomsonMeths
@@ -157,6 +169,15 @@ using Pkg
 Pkg.test("PTShared")
 Pkg.test("ThomsonMeths")
 ```
+
+---
+
+## 📄 Research Report
+
+This project was conducted as part of the *Introduction à la Recherche en Laboratoire (IRL)* research project at **GIPSA-Lab** (CNRS / Grenoble INP - Ensimag), under the supervision of **Simon Barthelmé**.
+
+The full 24-page research report detailing the theoretical background, mathematical derivations, combinatorial relaxation, and extensive numerical experiments is available in the repository:
+- **[Read Full Research Report (PDF)](docs/Rapport_IRL.pdf)**
 
 ---
 

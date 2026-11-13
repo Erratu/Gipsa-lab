@@ -8,13 +8,12 @@ on:
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Julia ${{ matrix.version }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        version: ['1.10', '1']
-        os: [ubuntu-latest]
+        version: ['1.10']
 
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +35,7 @@ jobs:
           julia --project=ThomsonMeths -e '
             using Pkg
             Pkg.develop(path="PTShared")
+            Pkg.resolve()
             Pkg.instantiate()
             Pkg.test()
           '
